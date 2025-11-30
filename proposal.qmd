@@ -1,0 +1,1383 @@
+---
+title: "EDAV Proposal"
+format: html
+---
+
+### Project Proposal:
+
+EDAV project on android malware/benign code
+
+I am interested in this area because I think cybersecurity does not get enough mainstream recognition- it is critical to the well-being of every other sector, it is also a data-rich(data quality is high too) computer centric field. Recently global events like the crowdstrike fiasco piqued my interest. I have always wanted to try doing some work in cybersecurity and this will be the first time! 
+### Questions:
+How imbalanced are the various categories and families of malware. What sort of permissions and API calls are most distinctive for each? What about memory/battery usage or network profiles?  Zero-days are never-seen before malware that exploit vulnerabilities previously unknown. There is also code that could not compile in the lab environment with reasons listed why. Should these be just considered as outliers or is there valuable knowledge to be gained from contrastive EDAV? 
+
+### Datasets I plan to use(I will use the first link listed but listed other relevant ones as well):
+https://www.unb.ca/cic/datasets/maldroid-2020.html
+Collected by UNB's Canadian Institute for Cybersecurity from various(cited in the link) reputable sources.
+— have access already, 17341 samples until 2018, 5 categories: Adware, Banking malware, SMS malware, Riskware, and Benign, APK files: 17,341 Android samples spanning between five distinct categories: Adware, Banking malware, SMS malware, Riskware, and Benign.
+Capturing-logs: The output analysis results of 13,077 samples in five categories: Adware, Banking malware, SMS malware, Riskware, and Benign.
+CSV files:
+470 extracted features for 11,598 APK files comprising frequencies of system calls, binders, and composite behaviors
+139 extracted features for 11,598 APK files comprising frequencies of system calls
+50,621 extracted features for 11,598 APK files comprising static information, such as intent actions, permissions, intent consts, permissions, files, method tags, sensitive APIs, services, packages, receivers, etc.
+
+### Other interesting sources:
+
+https://www.unb.ca/cic/datasets/andmal2020.html 
+— have access already,  big dataset 400k samples
+https://androzoo.uni.lu/?utm_source=chatgpt.com
+— don’t have access yes, very big dataset 20M+ samples
+https://data.mendeley.com/datasets/rvjptkrc34/1
+— have access already, small 1500 samples
+
+### Setup and Data loading:
+
+# Path to the CSV file (relative to your current working directory)
+file_path <- file.path("AndMal2020-dynamic-BeforeAndAfterReboot",
+                       "Ransomware_after_reboot_Cat.csv")
+
+# Read the CSV into a data frame
+ransomware_df <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Print number of rows
+cat("Number of rows:", nrow(ransomware_df), "\n")
+
+# Print number of columns
+cat("Number of columns:", ncol(ransomware_df), "\n")
+
+# Print the column names
+cat("Column names:\n")
+print(colnames(ransomware_df))
+tail(ransomware_df, 4)
+
+# Packages ----
+install.packages('ggplot2')
+install.packages('viridis')
+install.packages('tidyverse')
+install.packages('dplyr')
+install.packages('ggalluvial')
+library(ggalluvial)
+library(ggplot2)
+library(tidyverse)
+library(viridis)
+library(dplyr)
+library(scales)
+library(tibble)
+
+
+# Directory with the CSVs ----
+data_dir <- "ProjectProposal/AndMal2020-dynamic-BeforeAndAfterReboot"
+
+files <- list.files(
+  path    = data_dir,
+  pattern = "_Cat\\.csv$",
+  full.names = TRUE
+)
+
+# Build combined data frame ----
+andmal <- tibble(path = files) %>%
+  mutate(
+    file = basename(path),
+    # Use a different name for the category inferred from the file name
+    Category_file = str_replace(file, "_(before|after)_reboot_Cat\\.csv", ""),
+    reboot_state = if_else(
+      str_detect(file, "before_reboot"),
+      "Before reboot",
+      "After reboot"
+    ),
+    data = map(path, readr::read_csv, show_col_types = FALSE)
+  ) %>%
+  unnest(data) %>%  # no name conflict now
+  mutate(
+    # Category here is the column from the CSV (feature #143)
+    Category      = factor(Category),
+    Family        = factor(Family),
+    Category_file = factor(Category_file),
+    reboot_state  = factor(reboot_state,
+                           levels = c("Before reboot", "After reboot"))
+  )
+# Global color scheme ----
+
+andmal_theme <- theme_minimal(base_family = "sans") +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    axis.text.x   = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+
+category_col  <- scale_colour_viridis_d(option = "H", end = 0.9)
+category_fill <- scale_fill_viridis_d(option = "H", end = 0.9)
+# Derived memory features ----
+
+andmal <- andmal %>%
+  mutate(
+    heap_util = if_else(
+      Memory_HeapSize > 0,
+      Memory_HeapAlloc / Memory_HeapSize,
+      NA_real_
+    ),
+    dirty_ratio = if_else(
+      Memory_PssTotal > 0,
+      (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal,
+      NA_real_
+    ),
+    shared_frac = if_else(
+      (Memory_SharedClean + Memory_PrivateClean) > 0,
+      Memory_SharedClean / (Memory_SharedClean + Memory_PrivateClean),
+      NA_real_
+    ),
+    log_PssTotal      = log10(Memory_PssTotal + 1),
+    log_Process_total = log10(Process_total + 1),
+    log_API_sessions  = log10(API__sessions + 1)
+  )
+#  UI / object graph & in-app complexity
+
+ui_features <- c(
+  "Memory_Views",
+  "Memory_ViewRootImpl",
+  "Memory_AppContexts",
+  "Memory_Activities",
+  "Memory_Assets",
+  "Memory_AssetManagers",
+  "Memory_LocalBinders",
+  "Memory_ProxyBinders",
+  "Memory_ParcelMemory",
+  "Memory_ParcelCount",
+  "Memory_DeathRecipients",
+  "Memory_OpenSSLSockets",
+  "Memory_WebViews"
+)
+# DexClassLoader / dynamic loading API columns ----
+dex_apis <- c(
+  "API_DexClassLoader_dalvik.system.BaseDexClassLoader_findResource",
+  "API_DexClassLoader_dalvik.system.BaseDexClassLoader_findResources",
+  "API_DexClassLoader_dalvik.system.BaseDexClassLoader_findLibrary",
+  "API_DexClassLoader_dalvik.system.DexFile_loadDex",
+  "API_DexClassLoader_dalvik.system.DexFile_loadClass",
+  "API_DexClassLoader_dalvik.system.DexClassLoader_.init"
+)
+# Derived webview features ----
+
+webview_cols <- c(
+  "API_WebView_android.webkit.WebView_loadUrl",
+  "API_WebView_android.webkit.WebView_loadData",
+  "API_WebView_android.webkit.WebView_loadDataWithBaseURL",
+  "API_WebView_android.webkit.WebView_addJavascriptInterface",
+  "API_WebView_android.webkit.WebView_evaluateJavascript",
+  "API_WebView_android.webkit.WebView_postUrl",
+  "API_WebView_android.webkit.WebView_postWebMessage",
+  "API_WebView_android.webkit.WebView_savePassword",
+  "API_WebView_android.webkit.WebView_setHttpAuthUsernamePassword",
+  "API_WebView_android.webkit.WebView_getHttpAuthUsernamePassword",
+  "API_WebView_android.webkit.WebView_setWebContentsDebuggingEnabled"
+)
+andmal <- andmal %>%
+  mutate(
+    webview_calls = rowSums(across(all_of(webview_cols)), na.rm = TRUE),
+    log_WebView_calls = log10(webview_calls + 1),
+    log_NetTxBytes    = log10(Network_TotalTransmittedBytes + 1),
+    log_NetRxBytes    = log10(Network_TotalReceivedBytes + 1)
+  )
+
+andmal_before <- andmal %>%
+  filter(reboot_state == "Before reboot")
+
+fam_rank <- andmal_before %>%
+  count(Category, Family, sort = TRUE) %>%
+  group_by(Category) %>%
+  mutate(rank_in_cat = row_number()) %>%
+  ungroup()
+
+# Join ranks back and assign colors:
+#   rank 1 → red, 2 → blue, 3 → green, 4 → yellow, others → grey
+andmal_before_col <- andmal_before %>%
+  left_join(fam_rank, by = c("Category", "Family")) %>%
+  mutate(
+    rank_in_cat = if_else(is.na(rank_in_cat), Inf, rank_in_cat),
+    fam_color = case_when(
+      rank_in_cat == 1 ~ "red",
+      rank_in_cat == 2 ~ "blue",
+      rank_in_cat == 3 ~ "green",
+      rank_in_cat == 4 ~ "yellow",
+      TRUE             ~ "grey70"
+    )
+  )
+  
+# File & Database  
+  
+# File I/O APIs ----
+fileio_apis <- c(
+  "API_FileIO_libcore.io.IoBridge_open",
+  "API_FileIO_android.content.ContextWrapper_openFileInput",
+  "API_FileIO_android.content.ContextWrapper_openFileOutput",
+  "API_FileIO_android.content.ContextWrapper_deleteFile"
+)
+
+# Database APIs ----
+db_apis <- c(
+  "API_Database_android.content.ContextWrapper_openOrCreateDatabase",
+  "API_Database_android.content.ContextWrapper_databaseList",
+  "API_Database_android.content.ContextWrapper_deleteDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_execSQL",
+  "API_Database_android.database.sqlite.SQLiteDatabase_deleteDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_getPath",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insert",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertOrThrow",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_openDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_openOrCreateDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_query",
+  "API_Database_android.database.sqlite.SQLiteDatabase_queryWithFactory",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQuery",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQueryWithFactory",
+  "API_Database_android.database.sqlite.SQLiteDatabase_update",
+  "API_Database_android.database.sqlite.SQLiteDatabase_updateWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_compileStatement",
+  "API_Database_android.database.sqlite.SQLiteDatabase_create"
+)
+
+filedb_apis <- c(fileio_apis, db_apis)
+
+# Define read vs write DB APIs ----
+db_read_apis <- c(
+  "API_Database_android.database.sqlite.SQLiteDatabase_query",
+  "API_Database_android.database.sqlite.SQLiteDatabase_queryWithFactory",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQuery",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQueryWithFactory"
+)
+
+db_write_apis <- c(
+  "API_Database_android.database.sqlite.SQLiteDatabase_execSQL",
+  "API_Database_android.database.sqlite.SQLiteDatabase_deleteDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insert",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertOrThrow",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_update",
+  "API_Database_android.database.sqlite.SQLiteDatabase_updateWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_create"
+)
+
+# Crypto APIs (encryption / hashing)
+crypto_apis <- c(
+  "API_Crypto_javax.crypto.spec.SecretKeySpec_.init",
+  "API_Crypto_javax.crypto.Cipher_doFinal",
+  "API_Crypto.Hash_java.security.MessageDigest_digest",
+  "API_Crypto.Hash_java.security.MessageDigest_update"
+)
+
+# Base64 encoding / decoding APIs
+base64_apis <- c(
+  "API_Base64_android.util.Base64_decode",
+  "API_Base64_android.util.Base64_encode",
+  "API_Base64_android.util.Base64_encodeToString"
+)
+
+# IPC-related APIs (ContextWrapper) ----
+ipc_apis <- c(
+  "API_IPC_android.content.ContextWrapper_sendBroadcast",
+  "API_IPC_android.content.ContextWrapper_sendStickyBroadcast",
+  "API_IPC_android.content.ContextWrapper_startActivity",
+  "API_IPC_android.content.ContextWrapper_startService",
+  "API_IPC_android.content.ContextWrapper_stopService",
+  "API_IPC_android.content.ContextWrapper_registerReceiver"
+)
+
+# Device identifiers (Telephony / SIM)
+id_apis <- c(
+  "API_DeviceInfo_android.telephony.TelephonyManager_getDeviceId",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getSubscriberId",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getLine1Number",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getDeviceSoftwareVersion",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getSimSerialNumber"
+)
+
+# WiFi identifiers
+wifi_apis <- c(
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getMacAddress",
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getBSSID",
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getIpAddress",
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getNetworkId"
+)
+
+# Accounts / content access
+accounts_apis <- c(
+  "API_DeviceData_android.accounts.AccountManager_getAccountsByType",
+  "API_DeviceData_android.accounts.AccountManager_getAccounts"
+)
+
+content_apis <- c(
+  "API_DeviceData_android.content.ContentResolver_query",
+  "API_DeviceData_android.content.ContentResolver_registerContentObserver",
+  "API_DeviceData_android.content.ContentResolver_insert",
+  "API_DeviceData_android.content.ContentResolver_delete"
+)
+
+# Location & microphone
+location_apis <- c(
+  "API_DeviceData_android.location.Location_getLatitude",
+  "API_DeviceData_android.location.Location_getLongitude"
+)
+
+mic_apis <- c(
+  "API_DeviceData_android.media.AudioRecord_startRecording",
+  "API_DeviceData_android.media.MediaRecorder_start"
+)
+
+# Environment / installed apps / system info
+env_apis <- c(
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstallerPackageName",
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstalledApplications",
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstalledModules",
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstalledPackages",
+  "API_DeviceData_android.app.ApplicationPackageManager_getInstalledPackages",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getNetworkOperator",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getNetworkOperatorName",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getSimOperatorName",
+  "API_DeviceData_android.os.SystemProperties_get"
+)
+
+
+
+# Binder / Activity-related APIs ----
+binder_apis <- c(
+  "API_Binder_android.app.ContextImpl_registerReceiver",
+  "API_Binder_android.app.ActivityThread_handleReceiver",
+  "API_Binder_android.app.Activity_startActivity"
+)
+
+ipc_all <- c(ipc_apis, binder_apis)
+
+# Plots
+# Boxplots memory footprint by category
+
+p_mem <- ggplot(andmal, aes(x = Category, y = log_PssTotal, fill = Category)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_wrap(~ reboot_state) +
+  labs(
+    title    = "Memory footprint by malware category",
+    subtitle = "Memory_PssTotal on log10 scale, split by before/after reboot",
+    x = "Malware category",
+    y = "log10(Memory_PssTotal + 1)"
+  ) +
+  category_fill +
+  andmal_theme
+
+p_mem
+
+# Process intensity by category
+
+p_proc <- ggplot(andmal, aes(x = Category, y = log_Process_total, fill = Category)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_wrap(~ reboot_state) +
+  labs(
+    title    = "Process intensity by malware category",
+    subtitle = "Total number of processes (Process_total) on log10 scale",
+    x = "Malware category",
+    y = "log10(Process_total + 1)"
+  ) +
+  category_fill +
+  andmal_theme
+
+p_proc
+
+# Heap utilization vs dirty memory ratio
+
+p_heap_dirty <- ggplot(
+  andmal_before_col,
+  aes(
+    x = heap_util,
+    y = dirty_ratio,
+    colour = fam_color
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  facet_wrap(~ Category, scales = "free") +
+  scale_colour_identity(
+    name   = "Family rank within category",
+    breaks = c("red", "blue", "green", "yellow", "grey70"),
+    labels = c("Top 1 family", "Top 2 family",
+               "Top 3 family", "Top 4 family", "Other families"),
+    guide  = "legend"
+  ) +
+  labs(
+    title    = "Heap utilization vs dirty memory ratio (before reboot)",
+    subtitle = "Points colored by top 4 families (per category); others in grey",
+    x = "Heap utilization = Memory_HeapAlloc / Memory_HeapSize",
+    y = "Dirty ratio = (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal"
+  ) +
+  andmal_theme
+
+p_heap_dirty
+
+# API sessions vs memory footprint
+
+p_api_mem <- ggplot(
+  andmal_before_col,
+  aes(
+    x = log_API_sessions,
+    y = log_PssTotal,
+    colour = fam_color
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  facet_wrap(~ Category, scales = "free") +
+  scale_colour_identity(
+    name   = "Family rank within category",
+    breaks = c("red", "blue", "green", "yellow", "grey70"),
+    labels = c("Top 1 family", "Top 2 family",
+               "Top 3 family", "Top 4 family", "Other families"),
+    guide  = "legend"
+  ) +
+  labs(
+    title    = "API session activity vs memory footprint (before reboot)",
+    subtitle = "log10(API__sessions + 1) vs log10(Memory_PssTotal + 1), colored by top 4 families per category",
+    x = "log10(API__sessions + 1)",
+    y = "log10(Memory_PssTotal + 1)"
+  ) +
+  andmal_theme
+
+p_api_mem
+
+#Webview UI plots
+
+# Long format + scaling per feature
+ui_long <- andmal_before_col %>%
+  select(Category, Family, fam_color, all_of(ui_features)) %>%
+  pivot_longer(
+    cols = all_of(ui_features),
+    names_to = "ui_feature",
+    values_to = "value"
+  ) %>%
+  group_by(ui_feature) %>%
+  mutate(
+    value_scaled = (value - mean(value, na.rm = TRUE)) /
+                   sd(value, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Aggregate per Category x Family x feature
+ui_family_summary <- ui_long %>%
+  group_by(Category, Family, fam_color, ui_feature) %>%
+  summarise(
+    mean_scaled = mean(value_scaled, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Order features for nicer X-axis
+ui_family_summary <- ui_family_summary %>%
+  mutate(ui_feature = factor(ui_feature, levels = ui_features))
+
+# Parallel coordinates / radar-like plot
+p_ui_parallel <- ggplot(
+  ui_family_summary,
+  aes(
+    x = ui_feature,
+    y = mean_scaled,
+    group = Family,
+    colour = fam_color
+  )
+) +
+  geom_line(alpha = 0.8) +
+  facet_wrap(~ Category, scales = "free_y") +
+  scale_colour_identity(
+    name   = "Family rank within category",
+    breaks = c("red", "blue", "green", "yellow", "grey70"),
+    labels = c("Top 1 family", "Top 2 family",
+               "Top 3 family", "Top 4 family", "Other families"),
+    guide  = "legend"
+  ) +
+  labs(
+    title    = "UI / object graph profile by family (before reboot)",
+    subtitle = "Z-scored UI features; lines are families, colored by top-4 rank within each category",
+    x = "UI / object graph feature",
+    y = "Mean z-scored value"
+  ) +
+  andmal_theme +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor.x = element_blank()
+  )
+
+p_ui_parallel
+
+p_webview_activities <- ggplot(
+  andmal_before_col,
+  aes(
+    x = Memory_Activities,
+    y = Memory_WebViews,
+    colour = fam_color
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  facet_wrap(~ Category, scales = "free") +
+  scale_colour_identity(
+    name   = "Family rank within category",
+    breaks = c("red", "blue", "green", "yellow", "grey70"),
+    labels = c("Top 1 family", "Top 2 family",
+               "Top 3 family", "Top 4 family", "Other families"),
+    guide  = "legend"
+  ) +
+  labs(
+    title    = "WebView usage vs Activities (before reboot)",
+    subtitle = "Per sample; facets are malware categories, colors show top 4 families in each category",
+    x = "Memory_Activities",
+    y = "Memory_WebViews"
+  ) +
+  andmal_theme
+
+p_webview_activities
+# Processes and API calls
+
+api_proc_features <- c(
+  "API_Process_android.os.Process_start",
+  "API_Process_android.app.ActivityManager_killBackgroundProcesses",
+  "API_Process_android.os.Process_killProcess",
+  "API_Command_java.lang.Runtime_exec",
+  "API_Command_java.lang.ProcessBuilder_start",
+  "API_JavaNativeInterface_java.lang.Runtime_loadLibrary",
+  "API_JavaNativeInterface_java.lang.Runtime_load"
+)
+
+# Group them semantically
+api_proc_groups <- list(
+  ProcessMgmt = c(
+    "API_Process_android.os.Process_start",
+    "API_Process_android.app.ActivityManager_killBackgroundProcesses",
+    "API_Process_android.os.Process_killProcess"
+  ),
+  CommandExec = c(
+    "API_Command_java.lang.Runtime_exec",
+    "API_Command_java.lang.ProcessBuilder_start"
+  ),
+  NativeLoad = c(
+    "API_JavaNativeInterface_java.lang.Runtime_loadLibrary",
+    "API_JavaNativeInterface_java.lang.Runtime_load"
+  )
+)
+
+# API Behavior fingerprint
+andmal_proc_before <- andmal %>%
+  filter(reboot_state == "Before reboot")
+proc_presence <- andmal_proc_before %>%
+  select(Category, all_of(api_proc_features)) %>%
+  mutate(
+    across(
+      all_of(api_proc_features),
+      ~ as.integer(. > 0)  # 1 if API was ever called, else 0
+    )
+  ) %>%
+  pivot_longer(
+    cols = all_of(api_proc_features),
+    names_to = "api_call",
+    values_to = "present"
+  ) %>%
+  group_by(Category, api_call) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  ) %>%
+  mutate(
+    api_call = factor(api_call, levels = api_proc_features)
+  )
+
+# Heatmap: API × Category ----
+p_proc_heatmap <- ggplot(
+  proc_presence,
+  aes(x = Category, y = api_call, fill = prop_present)
+) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(
+    name   = "% samples using API",
+    labels = label_percent(accuracy = 1)
+  ) +
+  labs(
+    title    = "Process & native execution APIs by malware category (before reboot)",
+    subtitle = "Each cell shows the percentage of samples in a category that used the given API at least once",
+    x = "Malware category",
+    y = "API call"
+  ) +
+  andmal_theme +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid  = element_blank()
+  )
+
+p_proc_heatmap
+# Process manipulation index by category
+
+# For each sample, flag whether it used any API in each group ----
+proc_groups_long <- andmal_proc_before %>%
+  select(Category, all_of(unique(unlist(api_proc_groups)))) %>%
+  mutate(
+    ProcessMgmt = as.integer(
+      rowSums(across(all_of(api_proc_groups$ProcessMgmt), ~ . > 0), na.rm = TRUE) > 0
+    ),
+    CommandExec = as.integer(
+      rowSums(across(all_of(api_proc_groups$CommandExec), ~ . > 0), na.rm = TRUE) > 0
+    ),
+    NativeLoad = as.integer(
+      rowSums(across(all_of(api_proc_groups$NativeLoad), ~ . > 0), na.rm = TRUE) > 0
+    )
+  ) %>%
+  select(Category, ProcessMgmt, CommandExec, NativeLoad) %>%
+  pivot_longer(
+    cols      = c(ProcessMgmt, CommandExec, NativeLoad),
+    names_to  = "group",
+    values_to = "present"
+  )
+
+# Proportion of samples in each Category that have ≥1 call in each group ----
+proc_group_summary <- proc_groups_long %>%
+  group_by(Category, group) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Stacked bar: process manipulation index by category ----
+p_proc_groups <- ggplot(
+  proc_group_summary,
+  aes(x = Category, y = prop_present, fill = group)
+) +
+  geom_col(position = "stack") +  # use 'position = "dodge"' if you prefer side-by-side
+  scale_fill_viridis_d(
+    option = "D",
+    end    = 0.9,
+    name   = "API group",
+    labels = c(
+      ProcessMgmt = "Process management (start/kill)",
+      CommandExec = "Command execution",
+      NativeLoad  = "Native code loading"
+    )
+  ) +
+  scale_y_continuous(labels = label_percent(accuracy = 1)) +
+  labs(
+    title    = "Process manipulation index by malware category (before reboot)",
+    subtitle = "Each segment = proportion of samples with ≥1 call in that API group\nNote: segments can overlap, so bars may exceed 100% height",
+    x = "Malware category",
+    y = "Proportion of samples"
+  ) +
+  andmal_theme +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p_proc_groups
+
+# Scatterplot: network bytes vs WebView calls
+p_net_webview <- ggplot(
+  andmal_before_col,
+  aes(
+    x = log_NetTxBytes,
+    y = log_WebView_calls,
+    colour = fam_color
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  facet_wrap(~ Category, scales = "free") +
+  scale_colour_identity(
+    name   = "Family rank within category",
+    breaks = c("red", "blue", "green", "yellow", "grey70"),
+    labels = c("Top 1 family", "Top 2 family",
+               "Top 3 family", "Top 4 family", "Other families"),
+    guide  = "legend"
+  ) +
+  labs(
+    title    = "Network activity vs WebView usage (before reboot)",
+    subtitle = "log10(Network_TotalTransmittedBytes + 1) vs log10(total WebView calls), facetted by category\nTop 4 families in each category highlighted in red/blue/green/yellow",
+    x = "log10(Network_TotalTransmittedBytes + 1)",
+    y = "log10(total WebView API calls + 1)"
+  ) +
+  andmal_theme
+
+p_net_webview
+
+# Violin: network throughput by Category (TX & RX)
+
+p_net_tx_violin <- ggplot(
+  andmal,
+  aes(x = Category, y = log_NetTxBytes, fill = Category)
+) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  labs(
+    title    = "Network throughput (transmitted bytes) by malware category",
+    subtitle = "log10(Network_TotalTransmittedBytes + 1)",
+    x = "Malware category",
+    y = "log10(Network_TotalTransmittedBytes + 1)"
+  ) +
+  category_fill +   # from earlier: scale_fill_viridis_d(...)
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_net_tx_violin
+
+# Received bytes ----
+p_net_rx_violin <- ggplot(
+  andmal,
+  aes(x = Category, y = log_NetRxBytes, fill = Category)
+) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  labs(
+    title    = "Network throughput (received bytes) by malware category",
+    subtitle = "log10(Network_TotalReceivedBytes + 1)",
+    x = "Malware category",
+    y = "log10(Network_TotalReceivedBytes + 1)"
+  ) +
+  category_fill +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_net_rx_violin
+
+# Before vs after reboot: boxplots of network TX by Category
+
+p_net_tx_box_reboot <- ggplot(
+  andmal,
+  aes(x = Category, y = log_NetTxBytes, fill = reboot_state)
+) +
+  geom_boxplot(outlier.alpha = 0.3, position = position_dodge(width = 0.8)) +
+  labs(
+    title    = "Network transmitted bytes: before vs after reboot",
+    subtitle = "log10(Network_TotalTransmittedBytes + 1), side-by-side by reboot state",
+    x = "Malware category",
+    y = "log10(Network_TotalTransmittedBytes + 1)",
+    fill = "Reboot state"
+  ) +
+  scale_fill_manual(
+    values = c("Before reboot" = "#440154FF", "After reboot" = "#21908CFF")
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_net_tx_box_reboot
+
+# 1) Category-level means for all File/DB APIs ----
+filedb_means <- andmal %>%
+  select(Category, all_of(filedb_apis)) %>%
+  group_by(Category) %>%
+  summarise(
+    across(everything(), ~ mean(.x, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+# Turn into matrix: rows = Categories, cols = APIs ----
+filedb_mat <- filedb_means %>%
+  column_to_rownames("Category") %>%
+  as.matrix()
+
+# Replace NaN/Inf (e.g., mean of all-NA column) with 0 ----
+filedb_mat[!is.finite(filedb_mat)] <- 0
+
+# 2) Drop APIs with zero variance (no information) ----
+col_sds <- apply(filedb_mat, 2, sd, na.rm = TRUE)
+
+keep_cols <- names(col_sds)[col_sds > 0 & !is.na(col_sds)]
+filedb_mat2 <- filedb_mat[, keep_cols, drop = FALSE]
+
+# 3) Z-score across categories per API ----
+filedb_mat_scaled <- scale(filedb_mat2)  # center & scale each column
+
+# 4) Hierarchical clustering on rows (Categories) and columns (APIs) ----
+row_clust <- hclust(dist(filedb_mat_scaled))
+col_clust <- hclust(dist(t(filedb_mat_scaled)))
+
+row_order <- rownames(filedb_mat_scaled)[row_clust$order]
+col_order <- colnames(filedb_mat_scaled)[col_clust$order]
+
+# 5) Long format for ggplot, using clustered ordering ----
+filedb_long <- as.data.frame(filedb_mat_scaled) %>%
+  rownames_to_column("Category") %>%
+  pivot_longer(
+    cols      = -Category,
+    names_to  = "api_call",
+    values_to = "z_mean_calls"
+  ) %>%
+  mutate(
+    Category = factor(Category, levels = row_order),
+    api_call = factor(api_call, levels = col_order)
+  )
+
+# 6) Heatmap ----
+p_filedb_heatmap <- ggplot(
+  filedb_long,
+  aes(x = Category, y = api_call, fill = z_mean_calls)
+) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(
+    option = "B",
+    name   = "Z-scored\nmean calls"
+  ) +
+  labs(
+    title    = "File I/O and database activity by malware category",
+    subtitle = "Z-scored mean call counts per API; APIs with no variance removed, rows/cols clustered",
+    x = "Malware category",
+    y = "File / DB API"
+  ) +
+  andmal_theme +
+  theme(
+    panel.grid = element_blank()
+  )
+
+p_filedb_heatmap
+
+andmal_db <- andmal %>%
+  mutate(
+    total_DB_read_calls = rowSums(across(all_of(db_read_apis)),  na.rm = TRUE),
+    total_DB_write_calls = rowSums(across(all_of(db_write_apis)), na.rm = TRUE),
+    log_DB_reads  = log10(total_DB_read_calls  + 1),
+    log_DB_writes = log10(total_DB_write_calls + 1)
+  )
+
+# Scatter plot All categories: reads vs writes ---- 
+p_db_read_write <- ggplot(
+  andmal_db,
+  aes(
+    x = log_DB_reads,
+    y = log_DB_writes,
+    colour = Category
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  category_col +
+  labs(
+    title    = "Database read vs write activity",
+    subtitle = "log10(total DB reads + 1) vs log10(total DB writes + 1) per sample",
+    x = "log10(total DB read calls + 1)",
+    y = "log10(total DB write calls + 1)"
+  ) +
+  andmal_theme
+
+p_db_read_write
+
+# Scatter plot Facet: reads vs writes ---- 
+andmal_db_before_col <- andmal_before_col %>%
+  mutate(
+    total_DB_read_calls  = rowSums(across(all_of(db_read_apis)),  na.rm = TRUE),
+    total_DB_write_calls = rowSums(across(all_of(db_write_apis)), na.rm = TRUE),
+    log_DB_reads  = log10(total_DB_read_calls  + 1),
+    log_DB_writes = log10(total_DB_write_calls + 1)
+  )
+p_db_read_write_fam <- ggplot(
+  andmal_db_before_col,
+  aes(
+    x = log_DB_reads,
+    y = log_DB_writes,
+    colour = fam_color
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  facet_wrap(~ Category, scales = "free") +
+  scale_colour_identity(
+    name   = "Family rank within category",
+    breaks = c("red", "blue", "green", "yellow", "grey70"),
+    labels = c("Top 1 family", "Top 2 family",
+               "Top 3 family", "Top 4 family", "Other families"),
+    guide  = "legend"
+  ) +
+  labs(
+    title    = "Database read vs write activity (before reboot)",
+    subtitle = "log10(total DB reads + 1) vs log10(total DB writes + 1), facetted by category\nTop 4 families in each category highlighted; others in grey",
+    x = "log10(total DB read calls + 1)",
+    y = "log10(total DB write calls + 1)"
+  ) +
+  andmal_theme
+
+p_db_read_write_fam
+
+## 2. Keep only those Dex columns that actually exist in your data ----
+dex_apis_present <- dex_apis[dex_apis %in% names(andmal)]
+
+# (Optional) See which ones were missing:
+setdiff(dex_apis, names(andmal))
+# You can inspect this in the console if you're curious.
+
+## 3. Compute per-sample indicator: any dynamic Dex loading? ----
+andmal_dex <- andmal %>%
+  mutate(
+    dex_any = if (length(dex_apis_present) == 0) {
+      # If none of the Dex columns exist, nothing ever uses Dex
+      FALSE
+    } else {
+      rowSums(across(all_of(dex_apis_present)), na.rm = TRUE) > 0
+    }
+  )
+
+## If you want to restrict to before reboot only, uncomment this:
+# andmal_dex <- andmal_dex %>%
+#   filter(reboot_state == "Before reboot")
+
+## 4. Summarise per Category: proportion of samples with any Dex loading ----
+dex_summary <- andmal_dex %>%
+  group_by(Category) %>%
+  summarise(
+    prop_dex_any = mean(dex_any, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+## 5. Bar chart: % of apps using Dex loading, by Category ----
+p_dex_bar <- ggplot(
+  dex_summary,
+  aes(x = Category, y = prop_dex_any, fill = Category)
+) +
+  geom_col() +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  category_fill +   # assuming you defined this earlier
+  labs(
+    title    = "Dynamic Dex loading by malware category",
+    subtitle = "Percentage of samples that use any DexClassLoader / DexFile dynamic loading API",
+    x = "Malware category",
+    y = "% of samples with dynamic Dex loading"
+  ) +
+  andmal_theme +    # your global theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p_dex_bar
+
+# Cryptography and Encryption
+
+crypto_apis_present  <- crypto_apis[crypto_apis %in% names(andmal)]
+base64_apis_present  <- base64_apis[base64_apis %in% names(andmal)]
+
+# Derive total crypto and Base64 call counts + logs
+andmal_crypto <- andmal %>%
+  mutate(
+    crypto_calls = if (length(crypto_apis_present) == 0) {
+      0
+    } else {
+      rowSums(across(all_of(crypto_apis_present)), na.rm = TRUE)
+    },
+    base64_calls = if (length(base64_apis_present) == 0) {
+      0
+    } else {
+      rowSums(across(all_of(base64_apis_present)), na.rm = TRUE)
+    },
+    log_crypto  = log10(crypto_calls  + 1),
+    log_base64  = log10(base64_calls  + 1)
+  )
+p_crypto_intensity <- ggplot(
+  andmal_crypto,
+  aes(x = Category, y = log_crypto, fill = Category)
+) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  category_fill +
+  labs(
+    title    = "Crypto intensity by malware category",
+    subtitle = "log10(total crypto-related API calls + 1)\nCrypto APIs: Cipher_doFinal, MessageDigest_*, SecretKeySpec_.init",
+    x = "Malware category",
+    y = "log10(crypto_calls + 1)"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_crypto_intensity
+
+p_crypto_base64 <- ggplot(
+  andmal_crypto,
+  aes(
+    x = log_base64,
+    y = log_crypto,
+    colour = Category
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  category_col +
+  labs(
+    title    = "Crypto vs Base64 usage by malware category",
+    subtitle = "log10(total Base64 calls + 1) vs log10(total crypto calls + 1)",
+    x = "log10(Base64_calls + 1)",
+    y = "log10(crypto_calls + 1)"
+  ) +
+  andmal_theme
+
+p_crypto_base64
+
+#IPC/Binder plots
+
+We’ll group APIs into 4 behaviors:
+
+Broadcasts – sendBroadcast / sendStickyBroadcast
+
+Services – startService / stopService
+
+Receivers – any *_registerReceiver / ActivityThread_handleReceiver
+
+Activities – any *_startActivity
+
+Then compute, for each Category, the proportion of samples that use each behavior at least once.
+
+ipc_present <- ipc_all[ipc_all %in% names(andmal)]
+# Helper: safe rowSums for a subset of columns that may be missing ----
+safe_rowSums <- function(data, cols) {
+  cols <- intersect(cols, names(data))
+  if (length(cols) == 0) {
+    return(rep(0L, nrow(data)))
+  } else {
+    return(rowSums(data[, cols, drop = FALSE] > 0, na.rm = TRUE))
+  }
+}
+
+# Build per-sample flags for each IPC behavior group ----
+andmal_ipc_groups <- andmal %>%
+  mutate(
+    # Broadcasts: sendBroadcast + sendStickyBroadcast
+    has_broadcast = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_sendBroadcast",
+        "API_IPC_android.content.ContextWrapper_sendStickyBroadcast"
+      )
+    ) > 0,
+
+    has_service = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_startService",
+        "API_IPC_android.content.ContextWrapper_stopService"
+      )
+    ) > 0,
+
+    has_receiver = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_registerReceiver",
+        "API_Binder_android.app.ContextImpl_registerReceiver",
+        "API_Binder_android.app.ActivityThread_handleReceiver"
+      )
+    ) > 0,
+
+    has_activity = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_startActivity",
+        "API_Binder_android.app.Activity_startActivity"
+      )
+    ) > 0
+  ) %>%
+  select(Category, has_broadcast, has_service, has_receiver, has_activity) %>%
+  pivot_longer(
+    cols      = c(has_broadcast, has_service, has_receiver, has_activity),
+    names_to  = "ipc_group",
+    values_to = "present"
+  ) %>%
+  mutate(
+    ipc_group = recode(
+      ipc_group,
+      has_broadcast = "Broadcasts",
+      has_service   = "Services",
+      has_receiver  = "Receivers",
+      has_activity  = "Activities"
+    )
+  )
+
+# Summarise: % of samples in each Category that use each IPC group ----
+ipc_group_summary <- andmal_ipc_groups %>%
+  group_by(Category, ipc_group) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Bar chart: proportion by Category & IPC group ----
+p_ipc_groups <- ggplot(
+  ipc_group_summary,
+  aes(x = Category, y = prop_present, fill = ipc_group)
+) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_viridis_d(
+    option = "D",
+    end    = 0.9,
+    name   = "IPC/Binder behavior"
+  ) +
+  labs(
+    title    = "IPC, Binder & broadcast behavior by malware category",
+    subtitle = "Proportion of samples that use each IPC group at least once",
+    x = "Malware category",
+    y = "% of samples"
+  ) +
+  andmal_theme +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p_ipc_groups
+
+# Privacy
+# Derive PII & environment indices + log transforms
+safe_rowSums <- function(data, cols) {
+  cols <- intersect(cols, names(data))
+  if (length(cols) == 0) {
+    return(rep(0L, nrow(data)))
+  } else {
+    return(rowSums(data[, cols, drop = FALSE], na.rm = TRUE))
+  }
+}
+andmal_priv <- andmal %>%
+  mutate(
+    id_calls       = safe_rowSums(., c(id_apis, wifi_apis)),
+    accounts_calls = safe_rowSums(., c(accounts_apis, content_apis)),
+    location_calls = safe_rowSums(., location_apis),
+    mic_calls      = safe_rowSums(., mic_apis),
+    env_calls      = safe_rowSums(., env_apis),
+
+    PII_access_count   = id_calls + accounts_calls + location_calls + mic_calls,
+    env_probe_count    = env_calls,
+
+    log_PII_access  = log10(PII_access_count + 1),
+    log_env_probe   = log10(env_probe_count + 1),
+
+    has_ids       = id_calls       > 0,
+    has_accounts  = accounts_calls > 0,
+    has_location  = location_calls > 0,
+    has_mic       = mic_calls      > 0
+  )
+p_pii_index <- ggplot(
+  andmal_priv,
+  aes(x = Category, y = log_PII_access, fill = Category)
+) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  category_fill +
+  labs(
+    title    = "PII access intensity by malware category",
+    subtitle = "log10(PII_access_count + 1), where PII = IDs + accounts + location + mic calls",
+    x = "Malware category",
+    y = "log10(PII_access_count + 1)"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_pii_index
+
+# Long + summary for PII type proportions
+pii_long <- andmal_priv %>%
+  select(Category, has_ids, has_accounts, has_location, has_mic) %>%
+  pivot_longer(
+    cols      = c(has_ids, has_accounts, has_location, has_mic),
+    names_to  = "pii_type",
+    values_to = "present"
+  ) %>%
+  mutate(
+    pii_type = recode(
+      pii_type,
+      has_ids      = "Identifiers (device + WiFi)",
+      has_accounts = "Accounts & content",
+      has_location = "Location",
+      has_mic      = "Microphone"
+    )
+  )
+
+pii_summary <- pii_long %>%
+  group_by(Category, pii_type) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Stacked bar per Category: what PII is accessed?
+p_pii_type <- ggplot(
+  pii_summary,
+  aes(x = Category, y = prop_present, fill = pii_type)
+) +
+  geom_col(position = "stack") +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_viridis_d(
+    option = "D",
+    end    = 0.9,
+    name   = "PII type"
+  ) +
+  labs(
+    title    = "Types of PII accessed by malware category",
+    subtitle = "Each bar shows the proportion of samples accessing different PII types (may overlap)",
+    x = "Malware category",
+    y = "% of samples"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_pii_type
+
+# Long format for location/mic + reboot_state
+loc_mic_long <- andmal_priv %>%
+  mutate(
+    has_location = location_calls > 0,
+    has_mic      = mic_calls      > 0
+  ) %>%
+  select(Category, reboot_state, has_location, has_mic) %>%
+  pivot_longer(
+    cols      = c(has_location, has_mic),
+    names_to  = "sensor_type",
+    values_to = "present"
+  ) %>%
+  mutate(
+    sensor_type = recode(
+      sensor_type,
+      has_location = "Location",
+      has_mic      = "Microphone"
+    )
+  )
+
+loc_mic_summary <- loc_mic_long %>%
+  group_by(Category, reboot_state, sensor_type) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Bar chart: before vs after reboot for location/mic
+p_loc_mic_reboot <- ggplot(
+  loc_mic_summary,
+  aes(x = Category, y = prop_present, fill = reboot_state)
+) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ sensor_type) +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_manual(
+    values = c("Before reboot" = "#440154FF", "After reboot" = "#21908CFF"),
+    name   = "Reboot state"
+  ) +
+  labs(
+    title    = "Location and microphone access: before vs after reboot",
+    subtitle = "Proportion of samples touching location/mic APIs, by category & reboot state",
+    x = "Malware category",
+    y = "% of samples"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_loc_mic_reboot
+
+# Add log-transformed versions for plotting
+andmal_logs <- andmal %>%
+  mutate(
+    log_Logcat_total  = log10(Logcat_total  + 1),
+    log_Process_total = log10(Process_total + 1)
+  )
+
+p_log_process <- ggplot(
+  andmal_logs,
+  aes(
+    x = log_Process_total,
+    y = log_Logcat_total,
+    colour = Category
+  )
+) +
+  geom_point(alpha = 0.6, size = 1.2) +
+  facet_wrap(~ reboot_state) +
+  category_col +
+  labs(
+    title    = "Logcat volume vs process activity",
+    subtitle = "log10(Process_total + 1) vs log10(Logcat_total + 1), facetted by reboot state",
+    x = "log10(Process_total + 1)",
+    y = "log10(Logcat_total + 1)"
+  ) +
+  andmal_theme
+
+p_log_process
+
+battery_long <- andmal %>%
+  select(Category, Battery_wakelock, Battery_service) %>%
+  pivot_longer(
+    cols      = c(Battery_wakelock, Battery_service),
+    names_to  = "battery_metric",
+    values_to = "value"
+  ) %>%
+  mutate(
+    battery_metric = recode(
+      battery_metric,
+      Battery_wakelock = "Wakelock count",
+      Battery_service  = "Battery service events"
+    )
+  )
+
+p_battery <- ggplot(
+  battery_long,
+  aes(x = Category, y = value, fill = Category)
+) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_wrap(~ battery_metric, scales = "free_y") +
+  category_fill +
+  labs(
+    title    = "Battery-related behavior by malware category",
+    subtitle = "Battery_wakelock and Battery_service distributions per category",
+    x = "Malware category",
+    y = "Value"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_battery
+
+log_level_sums <- andmal %>%
+  group_by(Category) %>%
+  summarise(
+    error   = sum(Logcat_error,   na.rm = TRUE),
+    warning = sum(Logcat_warning, na.rm = TRUE),
+    info    = sum(Logcat_info,    na.rm = TRUE),
+    debug   = sum(Logcat_debug,   na.rm = TRUE),
+    verbose = sum(Logcat_verbose, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols      = c(error, warning, info, debug, verbose),
+    names_to  = "log_level",
+    values_to = "count"
+  ) %>%
+  group_by(Category) %>%
+  mutate(
+    total = sum(count, na.rm = TRUE),
+    frac  = if_else(total > 0, count / total, 0)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    log_level = factor(
+      log_level,
+      levels = c("error", "warning", "info", "debug", "verbose"),
+      labels = c("Error", "Warning", "Info", "Debug", "Verbose")
+    )
+  )
+
+p_log_levels <- ggplot(
+  log_level_sums,
+  aes(x = Category, y = frac, fill = log_level)
+) +
+  geom_col(position = "stack") +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_viridis_d(
+    option = "D",
+    end    = 0.9,
+    name   = "Log level"
+  ) +
+  labs(
+    title    = "Log level composition by malware category",
+    subtitle = "Fraction of log messages by level (aggregated across samples)",
+    x = "Malware category",
+    y = "% of log messages"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_log_levels

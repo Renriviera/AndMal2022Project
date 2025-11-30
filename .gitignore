@@ -1,0 +1,56 @@
+# R
+.RData
+.Rhistory
+.Ruserdata
+.Rproj.user/
+*.Rproj.user
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+.tmp/
+*.swp
+*.swo
+*~
+
+# Data files - exclude large CSV files (use Git LFS if needed)
+*.csv
+*.parquet
+*.parquet.tmp
+
+# R Markdown / Quarto
+*_files/
+*_cache/
+*.html
+*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
