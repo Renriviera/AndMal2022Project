@@ -96,6 +96,17 @@ andmal <- tibble(path = files) %>%
     reboot_state  = factor(reboot_state,
                            levels = c("Before reboot", "After reboot"))
   )
+
+# Split into two main dataframes ----
+andmal_before <- andmal %>%
+  filter(reboot_state == "Before reboot")
+
+andmal_after <- andmal %>%
+  filter(reboot_state == "After reboot")
+
+# Remove combined dataframe
+rm(andmal)
+
 # Global color scheme ----
 
 andmal_theme <- theme_minimal(base_family = "sans") +
@@ -108,31 +119,8 @@ andmal_theme <- theme_minimal(base_family = "sans") +
 
 category_col  <- scale_colour_viridis_d(option = "H", end = 0.9)
 category_fill <- scale_fill_viridis_d(option = "H", end = 0.9)
-# Derived memory features ----
 
-andmal <- andmal %>%
-  mutate(
-    heap_util = if_else(
-      Memory_HeapSize > 0,
-      Memory_HeapAlloc / Memory_HeapSize,
-      NA_real_
-    ),
-    dirty_ratio = if_else(
-      Memory_PssTotal > 0,
-      (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal,
-      NA_real_
-    ),
-    shared_frac = if_else(
-      (Memory_SharedClean + Memory_PrivateClean) > 0,
-      Memory_SharedClean / (Memory_SharedClean + Memory_PrivateClean),
-      NA_real_
-    ),
-    log_PssTotal      = log10(Memory_PssTotal + 1),
-    log_Process_total = log10(Process_total + 1),
-    log_API_sessions  = log10(API__sessions + 1)
-  )
 #  UI / object graph & in-app complexity
-
 ui_features <- c(
   "Memory_Views",
   "Memory_ViewRootImpl",
@@ -172,7 +160,56 @@ webview_cols <- c(
   "API_WebView_android.webkit.WebView_getHttpAuthUsernamePassword",
   "API_WebView_android.webkit.WebView_setWebContentsDebuggingEnabled"
 )
-andmal <- andmal %>%
+
+# Add all derived features to both dataframes ----
+
+# Memory features
+andmal_before <- andmal_before %>%
+  mutate(
+    heap_util = if_else(
+      Memory_HeapSize > 0,
+      Memory_HeapAlloc / Memory_HeapSize,
+      NA_real_
+    ),
+    dirty_ratio = if_else(
+      Memory_PssTotal > 0,
+      (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal,
+      NA_real_
+    ),
+    shared_frac = if_else(
+      (Memory_SharedClean + Memory_PrivateClean) > 0,
+      Memory_SharedClean / (Memory_SharedClean + Memory_PrivateClean),
+      NA_real_
+    ),
+    log_PssTotal      = log10(Memory_PssTotal + 1),
+    log_Process_total = log10(Process_total + 1),
+    log_API_sessions  = log10(API__sessions + 1)
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    heap_util = if_else(
+      Memory_HeapSize > 0,
+      Memory_HeapAlloc / Memory_HeapSize,
+      NA_real_
+    ),
+    dirty_ratio = if_else(
+      Memory_PssTotal > 0,
+      (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal,
+      NA_real_
+    ),
+    shared_frac = if_else(
+      (Memory_SharedClean + Memory_PrivateClean) > 0,
+      Memory_SharedClean / (Memory_SharedClean + Memory_PrivateClean),
+      NA_real_
+    ),
+    log_PssTotal      = log10(Memory_PssTotal + 1),
+    log_Process_total = log10(Process_total + 1),
+    log_API_sessions  = log10(API__sessions + 1)
+  )
+
+# Webview features
+andmal_before <- andmal_before %>%
   mutate(
     webview_calls = rowSums(across(all_of(webview_cols)), na.rm = TRUE),
     log_WebView_calls = log10(webview_calls + 1),
@@ -180,18 +217,22 @@ andmal <- andmal %>%
     log_NetRxBytes    = log10(Network_TotalReceivedBytes + 1)
   )
 
-andmal_before <- andmal %>%
-  filter(reboot_state == "Before reboot")
+andmal_after <- andmal_after %>%
+  mutate(
+    webview_calls = rowSums(across(all_of(webview_cols)), na.rm = TRUE),
+    log_WebView_calls = log10(webview_calls + 1),
+    log_NetTxBytes    = log10(Network_TotalTransmittedBytes + 1),
+    log_NetRxBytes    = log10(Network_TotalReceivedBytes + 1)
+  )
 
+# Add family rank colors to andmal_before ----
 fam_rank <- andmal_before %>%
   count(Category, Family, sort = TRUE) %>%
   group_by(Category) %>%
   mutate(rank_in_cat = row_number()) %>%
   ungroup()
 
-# Join ranks back and assign colors:
-#   rank 1 → red, 2 → blue, 3 → green, 4 → yellow, others → grey
-andmal_before_col <- andmal_before %>%
+andmal_before <- andmal_before %>%
   left_join(fam_rank, by = c("Category", "Family")) %>%
   mutate(
     rank_in_cat = if_else(is.na(rank_in_cat), Inf, rank_in_cat),
@@ -348,10 +389,220 @@ binder_apis <- c(
 
 ipc_all <- c(ipc_apis, binder_apis)
 
+# Add remaining derived features to both dataframes ----
+
+# Helper function for safe rowSums
+safe_rowSums <- function(data, cols) {
+  cols <- intersect(cols, names(data))
+  if (length(cols) == 0) {
+    return(rep(0L, nrow(data)))
+  } else {
+    return(rowSums(data[, cols, drop = FALSE], na.rm = TRUE))
+  }
+}
+
+# Database features
+andmal_before <- andmal_before %>%
+  mutate(
+    total_DB_read_calls = rowSums(across(all_of(db_read_apis)),  na.rm = TRUE),
+    total_DB_write_calls = rowSums(across(all_of(db_write_apis)), na.rm = TRUE),
+    log_DB_reads  = log10(total_DB_read_calls  + 1),
+    log_DB_writes = log10(total_DB_write_calls + 1)
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    total_DB_read_calls = rowSums(across(all_of(db_read_apis)),  na.rm = TRUE),
+    total_DB_write_calls = rowSums(across(all_of(db_write_apis)), na.rm = TRUE),
+    log_DB_reads  = log10(total_DB_read_calls  + 1),
+    log_DB_writes = log10(total_DB_write_calls + 1)
+  )
+
+# Dex features
+dex_apis_present <- dex_apis[dex_apis %in% names(andmal_before)]
+
+andmal_before <- andmal_before %>%
+  mutate(
+    dex_any = if (length(dex_apis_present) == 0) {
+      FALSE
+    } else {
+      rowSums(across(all_of(dex_apis_present)), na.rm = TRUE) > 0
+    }
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    dex_any = if (length(dex_apis_present) == 0) {
+      FALSE
+    } else {
+      rowSums(across(all_of(dex_apis_present)), na.rm = TRUE) > 0
+    }
+  )
+
+# Crypto features
+crypto_apis_present  <- crypto_apis[crypto_apis %in% names(andmal_before)]
+base64_apis_present  <- base64_apis[base64_apis %in% names(andmal_before)]
+
+andmal_before <- andmal_before %>%
+  mutate(
+    crypto_calls = if (length(crypto_apis_present) == 0) {
+      0
+    } else {
+      rowSums(across(all_of(crypto_apis_present)), na.rm = TRUE)
+    },
+    base64_calls = if (length(base64_apis_present) == 0) {
+      0
+    } else {
+      rowSums(across(all_of(base64_apis_present)), na.rm = TRUE)
+    },
+    log_crypto  = log10(crypto_calls  + 1),
+    log_base64  = log10(base64_calls  + 1)
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    crypto_calls = if (length(crypto_apis_present) == 0) {
+      0
+    } else {
+      rowSums(across(all_of(crypto_apis_present)), na.rm = TRUE)
+    },
+    base64_calls = if (length(base64_apis_present) == 0) {
+      0
+    } else {
+      rowSums(across(all_of(base64_apis_present)), na.rm = TRUE)
+    },
+    log_crypto  = log10(crypto_calls  + 1),
+    log_base64  = log10(base64_calls  + 1)
+  )
+
+# IPC features
+ipc_present <- ipc_all[ipc_all %in% names(andmal_before)]
+
+andmal_before <- andmal_before %>%
+  mutate(
+    has_broadcast = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_sendBroadcast",
+        "API_IPC_android.content.ContextWrapper_sendStickyBroadcast"
+      )
+    ) > 0,
+    has_service = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_startService",
+        "API_IPC_android.content.ContextWrapper_stopService"
+      )
+    ) > 0,
+    has_receiver = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_registerReceiver",
+        "API_Binder_android.app.ContextImpl_registerReceiver",
+        "API_Binder_android.app.ActivityThread_handleReceiver"
+      )
+    ) > 0,
+    has_activity = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_startActivity",
+        "API_Binder_android.app.Activity_startActivity"
+      )
+    ) > 0
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    has_broadcast = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_sendBroadcast",
+        "API_IPC_android.content.ContextWrapper_sendStickyBroadcast"
+      )
+    ) > 0,
+    has_service = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_startService",
+        "API_IPC_android.content.ContextWrapper_stopService"
+      )
+    ) > 0,
+    has_receiver = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_registerReceiver",
+        "API_Binder_android.app.ContextImpl_registerReceiver",
+        "API_Binder_android.app.ActivityThread_handleReceiver"
+      )
+    ) > 0,
+    has_activity = safe_rowSums(
+      .,
+      c(
+        "API_IPC_android.content.ContextWrapper_startActivity",
+        "API_Binder_android.app.Activity_startActivity"
+      )
+    ) > 0
+  )
+
+# Privacy features
+andmal_before <- andmal_before %>%
+  mutate(
+    id_calls       = safe_rowSums(., c(id_apis, wifi_apis)),
+    accounts_calls = safe_rowSums(., c(accounts_apis, content_apis)),
+    location_calls = safe_rowSums(., location_apis),
+    mic_calls      = safe_rowSums(., mic_apis),
+    env_calls      = safe_rowSums(., env_apis),
+    PII_access_count   = id_calls + accounts_calls + location_calls + mic_calls,
+    env_probe_count    = env_calls,
+    log_PII_access  = log10(PII_access_count + 1),
+    log_env_probe   = log10(env_probe_count + 1),
+    has_ids       = id_calls       > 0,
+    has_accounts  = accounts_calls > 0,
+    has_location  = location_calls > 0,
+    has_mic       = mic_calls      > 0
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    id_calls       = safe_rowSums(., c(id_apis, wifi_apis)),
+    accounts_calls = safe_rowSums(., c(accounts_apis, content_apis)),
+    location_calls = safe_rowSums(., location_apis),
+    mic_calls      = safe_rowSums(., mic_apis),
+    env_calls      = safe_rowSums(., env_apis),
+    PII_access_count   = id_calls + accounts_calls + location_calls + mic_calls,
+    env_probe_count    = env_calls,
+    log_PII_access  = log10(PII_access_count + 1),
+    log_env_probe   = log10(env_probe_count + 1),
+    has_ids       = id_calls       > 0,
+    has_accounts  = accounts_calls > 0,
+    has_location  = location_calls > 0,
+    has_mic       = mic_calls      > 0
+  )
+
+# Log features
+andmal_before <- andmal_before %>%
+  mutate(
+    log_Logcat_total  = log10(Logcat_total  + 1)
+  )
+
+andmal_after <- andmal_after %>%
+  mutate(
+    log_Logcat_total  = log10(Logcat_total  + 1)
+  )
+
+# Helper function to combine dataframes when needed for plots
+get_combined_data <- function() {
+  bind_rows(
+    andmal_before,
+    andmal_after
+  ) %>%
+  mutate(reboot_state = factor(reboot_state, levels = c("Before reboot", "After reboot")))
+}
+
 # Plots
 # Boxplots memory footprint by category
 
-p_mem <- ggplot(andmal, aes(x = Category, y = log_PssTotal, fill = Category)) +
+p_mem <- ggplot(get_combined_data(), aes(x = Category, y = log_PssTotal, fill = Category)) +
   geom_boxplot(outlier.alpha = 0.3) +
   facet_wrap(~ reboot_state) +
   labs(
@@ -367,7 +618,7 @@ p_mem
 
 # Process intensity by category
 
-p_proc <- ggplot(andmal, aes(x = Category, y = log_Process_total, fill = Category)) +
+p_proc <- ggplot(get_combined_data(), aes(x = Category, y = log_Process_total, fill = Category)) +
   geom_boxplot(outlier.alpha = 0.3) +
   facet_wrap(~ reboot_state) +
   labs(
@@ -384,7 +635,7 @@ p_proc
 # Heap utilization vs dirty memory ratio
 
 p_heap_dirty <- ggplot(
-  andmal_before_col,
+  andmal_before,
   aes(
     x = heap_util,
     y = dirty_ratio,
@@ -413,7 +664,7 @@ p_heap_dirty
 # API sessions vs memory footprint
 
 p_api_mem <- ggplot(
-  andmal_before_col,
+  andmal_before,
   aes(
     x = log_API_sessions,
     y = log_PssTotal,
@@ -442,7 +693,7 @@ p_api_mem
 #Webview UI plots
 
 # Long format + scaling per feature
-ui_long <- andmal_before_col %>%
+ui_long <- andmal_before %>%
   select(Category, Family, fam_color, all_of(ui_features)) %>%
   pivot_longer(
     cols = all_of(ui_features),
@@ -502,7 +753,7 @@ p_ui_parallel <- ggplot(
 p_ui_parallel
 
 p_webview_activities <- ggplot(
-  andmal_before_col,
+  andmal_before,
   aes(
     x = Memory_Activities,
     y = Memory_WebViews,
@@ -557,9 +808,7 @@ api_proc_groups <- list(
 )
 
 # API Behavior fingerprint
-andmal_proc_before <- andmal %>%
-  filter(reboot_state == "Before reboot")
-proc_presence <- andmal_proc_before %>%
+proc_presence <- andmal_before %>%
   select(Category, all_of(api_proc_features)) %>%
   mutate(
     across(
@@ -608,7 +857,7 @@ p_proc_heatmap
 # Process manipulation index by category
 
 # For each sample, flag whether it used any API in each group ----
-proc_groups_long <- andmal_proc_before %>%
+proc_groups_long <- andmal_before %>%
   select(Category, all_of(unique(unlist(api_proc_groups)))) %>%
   mutate(
     ProcessMgmt = as.integer(
@@ -669,7 +918,7 @@ p_proc_groups
 
 # Scatterplot: network bytes vs WebView calls
 p_net_webview <- ggplot(
-  andmal_before_col,
+  andmal_before,
   aes(
     x = log_NetTxBytes,
     y = log_WebView_calls,
@@ -698,7 +947,7 @@ p_net_webview
 # Violin: network throughput by Category (TX & RX)
 
 p_net_tx_violin <- ggplot(
-  andmal,
+  get_combined_data(),
   aes(x = Category, y = log_NetTxBytes, fill = Category)
 ) +
   geom_violin(trim = FALSE, alpha = 0.8) +
@@ -716,7 +965,7 @@ p_net_tx_violin
 
 # Received bytes ----
 p_net_rx_violin <- ggplot(
-  andmal,
+  get_combined_data(),
   aes(x = Category, y = log_NetRxBytes, fill = Category)
 ) +
   geom_violin(trim = FALSE, alpha = 0.8) +
@@ -735,7 +984,7 @@ p_net_rx_violin
 # Before vs after reboot: boxplots of network TX by Category
 
 p_net_tx_box_reboot <- ggplot(
-  andmal,
+  get_combined_data(),
   aes(x = Category, y = log_NetTxBytes, fill = reboot_state)
 ) +
   geom_boxplot(outlier.alpha = 0.3, position = position_dodge(width = 0.8)) +
@@ -755,7 +1004,7 @@ p_net_tx_box_reboot <- ggplot(
 p_net_tx_box_reboot
 
 # 1) Category-level means for all File/DB APIs ----
-filedb_means <- andmal %>%
+filedb_means <- get_combined_data() %>%
   select(Category, all_of(filedb_apis)) %>%
   group_by(Category) %>%
   summarise(
@@ -823,17 +1072,9 @@ p_filedb_heatmap <- ggplot(
 
 p_filedb_heatmap
 
-andmal_db <- andmal %>%
-  mutate(
-    total_DB_read_calls = rowSums(across(all_of(db_read_apis)),  na.rm = TRUE),
-    total_DB_write_calls = rowSums(across(all_of(db_write_apis)), na.rm = TRUE),
-    log_DB_reads  = log10(total_DB_read_calls  + 1),
-    log_DB_writes = log10(total_DB_write_calls + 1)
-  )
-
 # Scatter plot All categories: reads vs writes ---- 
 p_db_read_write <- ggplot(
-  andmal_db,
+  get_combined_data(),
   aes(
     x = log_DB_reads,
     y = log_DB_writes,
@@ -853,15 +1094,8 @@ p_db_read_write <- ggplot(
 p_db_read_write
 
 # Scatter plot Facet: reads vs writes ---- 
-andmal_db_before_col <- andmal_before_col %>%
-  mutate(
-    total_DB_read_calls  = rowSums(across(all_of(db_read_apis)),  na.rm = TRUE),
-    total_DB_write_calls = rowSums(across(all_of(db_write_apis)), na.rm = TRUE),
-    log_DB_reads  = log10(total_DB_read_calls  + 1),
-    log_DB_writes = log10(total_DB_write_calls + 1)
-  )
 p_db_read_write_fam <- ggplot(
-  andmal_db_before_col,
+  andmal_before,
   aes(
     x = log_DB_reads,
     y = log_DB_writes,
@@ -888,29 +1122,12 @@ p_db_read_write_fam <- ggplot(
 p_db_read_write_fam
 
 ## 2. Keep only those Dex columns that actually exist in your data ----
-dex_apis_present <- dex_apis[dex_apis %in% names(andmal)]
-
 # (Optional) See which ones were missing:
-setdiff(dex_apis, names(andmal))
+setdiff(dex_apis, names(andmal_before))
 # You can inspect this in the console if you're curious.
 
-## 3. Compute per-sample indicator: any dynamic Dex loading? ----
-andmal_dex <- andmal %>%
-  mutate(
-    dex_any = if (length(dex_apis_present) == 0) {
-      # If none of the Dex columns exist, nothing ever uses Dex
-      FALSE
-    } else {
-      rowSums(across(all_of(dex_apis_present)), na.rm = TRUE) > 0
-    }
-  )
-
-## If you want to restrict to before reboot only, uncomment this:
-# andmal_dex <- andmal_dex %>%
-#   filter(reboot_state == "Before reboot")
-
-## 4. Summarise per Category: proportion of samples with any Dex loading ----
-dex_summary <- andmal_dex %>%
+## 3. Summarise per Category: proportion of samples with any Dex loading ----
+dex_summary <- get_combined_data() %>%
   group_by(Category) %>%
   summarise(
     prop_dex_any = mean(dex_any, na.rm = TRUE),
@@ -944,27 +1161,8 @@ p_dex_bar
 
 # Cryptography and Encryption
 
-crypto_apis_present  <- crypto_apis[crypto_apis %in% names(andmal)]
-base64_apis_present  <- base64_apis[base64_apis %in% names(andmal)]
-
-# Derive total crypto and Base64 call counts + logs
-andmal_crypto <- andmal %>%
-  mutate(
-    crypto_calls = if (length(crypto_apis_present) == 0) {
-      0
-    } else {
-      rowSums(across(all_of(crypto_apis_present)), na.rm = TRUE)
-    },
-    base64_calls = if (length(base64_apis_present) == 0) {
-      0
-    } else {
-      rowSums(across(all_of(base64_apis_present)), na.rm = TRUE)
-    },
-    log_crypto  = log10(crypto_calls  + 1),
-    log_base64  = log10(base64_calls  + 1)
-  )
 p_crypto_intensity <- ggplot(
-  andmal_crypto,
+  get_combined_data(),
   aes(x = Category, y = log_crypto, fill = Category)
 ) +
   geom_violin(trim = FALSE, alpha = 0.8) +
@@ -981,7 +1179,7 @@ p_crypto_intensity <- ggplot(
 p_crypto_intensity
 
 p_crypto_base64 <- ggplot(
-  andmal_crypto,
+  get_combined_data(),
   aes(
     x = log_base64,
     y = log_crypto,
@@ -1014,54 +1212,8 @@ Activities – any *_startActivity
 
 Then compute, for each Category, the proportion of samples that use each behavior at least once.
 
-ipc_present <- ipc_all[ipc_all %in% names(andmal)]
-# Helper: safe rowSums for a subset of columns that may be missing ----
-safe_rowSums <- function(data, cols) {
-  cols <- intersect(cols, names(data))
-  if (length(cols) == 0) {
-    return(rep(0L, nrow(data)))
-  } else {
-    return(rowSums(data[, cols, drop = FALSE] > 0, na.rm = TRUE))
-  }
-}
-
 # Build per-sample flags for each IPC behavior group ----
-andmal_ipc_groups <- andmal %>%
-  mutate(
-    # Broadcasts: sendBroadcast + sendStickyBroadcast
-    has_broadcast = safe_rowSums(
-      .,
-      c(
-        "API_IPC_android.content.ContextWrapper_sendBroadcast",
-        "API_IPC_android.content.ContextWrapper_sendStickyBroadcast"
-      )
-    ) > 0,
-
-    has_service = safe_rowSums(
-      .,
-      c(
-        "API_IPC_android.content.ContextWrapper_startService",
-        "API_IPC_android.content.ContextWrapper_stopService"
-      )
-    ) > 0,
-
-    has_receiver = safe_rowSums(
-      .,
-      c(
-        "API_IPC_android.content.ContextWrapper_registerReceiver",
-        "API_Binder_android.app.ContextImpl_registerReceiver",
-        "API_Binder_android.app.ActivityThread_handleReceiver"
-      )
-    ) > 0,
-
-    has_activity = safe_rowSums(
-      .,
-      c(
-        "API_IPC_android.content.ContextWrapper_startActivity",
-        "API_Binder_android.app.Activity_startActivity"
-      )
-    ) > 0
-  ) %>%
+ipc_group_summary <- get_combined_data() %>%
   select(Category, has_broadcast, has_service, has_receiver, has_activity) %>%
   pivot_longer(
     cols      = c(has_broadcast, has_service, has_receiver, has_activity),
@@ -1076,10 +1228,7 @@ andmal_ipc_groups <- andmal %>%
       has_receiver  = "Receivers",
       has_activity  = "Activities"
     )
-  )
-
-# Summarise: % of samples in each Category that use each IPC group ----
-ipc_group_summary <- andmal_ipc_groups %>%
+  ) %>%
   group_by(Category, ipc_group) %>%
   summarise(
     prop_present = mean(present, na.rm = TRUE),
@@ -1116,36 +1265,8 @@ p_ipc_groups <- ggplot(
 p_ipc_groups
 
 # Privacy
-# Derive PII & environment indices + log transforms
-safe_rowSums <- function(data, cols) {
-  cols <- intersect(cols, names(data))
-  if (length(cols) == 0) {
-    return(rep(0L, nrow(data)))
-  } else {
-    return(rowSums(data[, cols, drop = FALSE], na.rm = TRUE))
-  }
-}
-andmal_priv <- andmal %>%
-  mutate(
-    id_calls       = safe_rowSums(., c(id_apis, wifi_apis)),
-    accounts_calls = safe_rowSums(., c(accounts_apis, content_apis)),
-    location_calls = safe_rowSums(., location_apis),
-    mic_calls      = safe_rowSums(., mic_apis),
-    env_calls      = safe_rowSums(., env_apis),
-
-    PII_access_count   = id_calls + accounts_calls + location_calls + mic_calls,
-    env_probe_count    = env_calls,
-
-    log_PII_access  = log10(PII_access_count + 1),
-    log_env_probe   = log10(env_probe_count + 1),
-
-    has_ids       = id_calls       > 0,
-    has_accounts  = accounts_calls > 0,
-    has_location  = location_calls > 0,
-    has_mic       = mic_calls      > 0
-  )
 p_pii_index <- ggplot(
-  andmal_priv,
+  get_combined_data(),
   aes(x = Category, y = log_PII_access, fill = Category)
 ) +
   geom_violin(trim = FALSE, alpha = 0.8) +
@@ -1162,7 +1283,7 @@ p_pii_index <- ggplot(
 p_pii_index
 
 # Long + summary for PII type proportions
-pii_long <- andmal_priv %>%
+pii_long <- get_combined_data() %>%
   select(Category, has_ids, has_accounts, has_location, has_mic) %>%
   pivot_longer(
     cols      = c(has_ids, has_accounts, has_location, has_mic),
@@ -1214,7 +1335,7 @@ p_pii_type <- ggplot(
 p_pii_type
 
 # Long format for location/mic + reboot_state
-loc_mic_long <- andmal_priv %>%
+loc_mic_long <- get_combined_data() %>%
   mutate(
     has_location = location_calls > 0,
     has_mic      = mic_calls      > 0
@@ -1267,15 +1388,8 @@ p_loc_mic_reboot <- ggplot(
 
 p_loc_mic_reboot
 
-# Add log-transformed versions for plotting
-andmal_logs <- andmal %>%
-  mutate(
-    log_Logcat_total  = log10(Logcat_total  + 1),
-    log_Process_total = log10(Process_total + 1)
-  )
-
 p_log_process <- ggplot(
-  andmal_logs,
+  get_combined_data(),
   aes(
     x = log_Process_total,
     y = log_Logcat_total,
@@ -1295,7 +1409,7 @@ p_log_process <- ggplot(
 
 p_log_process
 
-battery_long <- andmal %>%
+battery_long <- get_combined_data() %>%
   select(Category, Battery_wakelock, Battery_service) %>%
   pivot_longer(
     cols      = c(Battery_wakelock, Battery_service),
@@ -1328,7 +1442,7 @@ p_battery <- ggplot(
 
 p_battery
 
-log_level_sums <- andmal %>%
+log_level_sums <- get_combined_data() %>%
   group_by(Category) %>%
   summarise(
     error   = sum(Logcat_error,   na.rm = TRUE),
