@@ -22,11 +22,17 @@
 *.parquet
 *.parquet.tmp
 
+# ProjectProposal data organization
+ProjectProposal/data/raw/*.csv
+ProjectProposal/data/raw/*.parquet
+
 # R Markdown / Quarto
 *_files/
 *_cache/
 *.html
 *.pdf
+ProjectProposal/docs/
+ProjectProposal/.quarto/
 
 # Python
 __pycache__/

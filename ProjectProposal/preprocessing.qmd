@@ -1,0 +1,695 @@
+---
+title: "Data Preprocessing"
+format: html
+---
+
+This document loads the raw data, performs feature engineering, and saves processed datasets for use in other analysis documents.
+
+## Data Loading
+
+```{r}
+#| label: load-libraries
+#| cache: true
+#| message: false
+
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(tibble)
+library(stringr)
+library(tidyr)
+library(purrr)
+```
+
+```{r}
+#| label: load-data
+#| cache: true
+
+# Directory with the CSVs
+data_dir <- "data/raw/AndMal2020-dynamic-BeforeAndAfterReboot"
+
+files <- list.files(
+  path    = data_dir,
+  pattern = "_Cat\\.csv$",
+  full.names = TRUE
+)
+
+cat(sprintf("Found %d CSV files\n", length(files)))
+
+# Build combined data frame
+cat("Reading CSV files...\n")
+andmal <- tibble(path = files) %>%
+  mutate(
+    file = basename(path),
+    # Use a different name for the category inferred from the file name
+    Category_file = str_replace(file, "_(before|after)_reboot_Cat\\.csv", ""),
+    reboot_state = if_else(
+      str_detect(file, "before_reboot"),
+      "Before reboot",
+      "After reboot"
+    ),
+    data = map(path, readr::read_csv, show_col_types = FALSE)
+  ) %>%
+  unnest(data) %>%
+  mutate(
+    # Category here is the column from the CSV (feature #143)
+    Category      = factor(Category),
+    Family        = factor(Family),
+    Category_file = factor(Category_file),
+    reboot_state  = factor(reboot_state,
+                           levels = c("Before reboot", "After reboot"))
+  )
+
+# Split into two main dataframes
+andmal_before <- andmal %>%
+  filter(reboot_state == "Before reboot")
+
+andmal_after <- andmal %>%
+  filter(reboot_state == "After reboot")
+
+# Remove combined dataframe to save memory
+rm(andmal)
+gc()
+
+cat(sprintf("andmal_before: %d rows, %d columns\n", nrow(andmal_before), ncol(andmal_before)))
+cat(sprintf("andmal_after: %d rows, %d columns\n", nrow(andmal_after), ncol(andmal_after)))
+```
+
+## Feature Definitions
+
+```{r}
+#| label: define-features
+#| cache: true
+
+# UI / object graph & in-app complexity
+ui_features <- c(
+  "Memory_Views",
+  "Memory_ViewRootImpl",
+  "Memory_AppContexts",
+  "Memory_Activities",
+  "Memory_Assets",
+  "Memory_AssetManagers",
+  "Memory_LocalBinders",
+  "Memory_ProxyBinders",
+  "Memory_ParcelMemory",
+  "Memory_ParcelCount",
+  "Memory_DeathRecipients",
+  "Memory_OpenSSLSockets",
+  "Memory_WebViews"
+)
+
+# DexClassLoader / dynamic loading API columns
+dex_apis <- c(
+  "API_DexClassLoader_dalvik.system.BaseDexClassLoader_findResource",
+  "API_DexClassLoader_dalvik.system.BaseDexClassLoader_findResources",
+  "API_DexClassLoader_dalvik.system.BaseDexClassLoader_findLibrary",
+  "API_DexClassLoader_dalvik.system.DexFile_loadDex",
+  "API_DexClassLoader_dalvik.system.DexFile_loadClass",
+  "API_DexClassLoader_dalvik.system.DexClassLoader_.init"
+)
+
+# Webview features
+webview_cols <- c(
+  "API_WebView_android.webkit.WebView_loadUrl",
+  "API_WebView_android.webkit.WebView_loadData",
+  "API_WebView_android.webkit.WebView_loadDataWithBaseURL",
+  "API_WebView_android.webkit.WebView_addJavascriptInterface",
+  "API_WebView_android.webkit.WebView_evaluateJavascript",
+  "API_WebView_android.webkit.WebView_postUrl",
+  "API_WebView_android.webkit.WebView_postWebMessage",
+  "API_WebView_android.webkit.WebView_savePassword",
+  "API_WebView_android.webkit.WebView_setHttpAuthUsernamePassword",
+  "API_WebView_android.webkit.WebView_getHttpAuthUsernamePassword",
+  "API_WebView_android.webkit.WebView_setWebContentsDebuggingEnabled"
+)
+
+# File I/O APIs
+fileio_apis <- c(
+  "API_FileIO_libcore.io.IoBridge_open",
+  "API_FileIO_android.content.ContextWrapper_openFileInput",
+  "API_FileIO_android.content.ContextWrapper_openFileOutput",
+  "API_FileIO_android.content.ContextWrapper_deleteFile"
+)
+
+# Database APIs
+db_apis <- c(
+  "API_Database_android.content.ContextWrapper_openOrCreateDatabase",
+  "API_Database_android.content.ContextWrapper_databaseList",
+  "API_Database_android.content.ContextWrapper_deleteDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_execSQL",
+  "API_Database_android.database.sqlite.SQLiteDatabase_deleteDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_getPath",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insert",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertOrThrow",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_openDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_openOrCreateDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_query",
+  "API_Database_android.database.sqlite.SQLiteDatabase_queryWithFactory",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQuery",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQueryWithFactory",
+  "API_Database_android.database.sqlite.SQLiteDatabase_update",
+  "API_Database_android.database.sqlite.SQLiteDatabase_updateWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_compileStatement",
+  "API_Database_android.database.sqlite.SQLiteDatabase_create"
+)
+
+db_read_apis <- c(
+  "API_Database_android.database.sqlite.SQLiteDatabase_query",
+  "API_Database_android.database.sqlite.SQLiteDatabase_queryWithFactory",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQuery",
+  "API_Database_android.database.sqlite.SQLiteDatabase_rawQueryWithFactory"
+)
+
+db_write_apis <- c(
+  "API_Database_android.database.sqlite.SQLiteDatabase_execSQL",
+  "API_Database_android.database.sqlite.SQLiteDatabase_deleteDatabase",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insert",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertOrThrow",
+  "API_Database_android.database.sqlite.SQLiteDatabase_insertWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_update",
+  "API_Database_android.database.sqlite.SQLiteDatabase_updateWithOnConflict",
+  "API_Database_android.database.sqlite.SQLiteDatabase_create"
+)
+
+crypto_apis <- c(
+  "API_Crypto_javax.crypto.spec.SecretKeySpec_.init",
+  "API_Crypto_javax.crypto.Cipher_doFinal",
+  "API_Crypto.Hash_java.security.MessageDigest_digest",
+  "API_Crypto.Hash_java.security.MessageDigest_update"
+)
+
+base64_apis <- c(
+  "API_Base64_android.util.Base64_decode",
+  "API_Base64_android.util.Base64_encode",
+  "API_Base64_android.util.Base64_encodeToString"
+)
+
+ipc_apis <- c(
+  "API_IPC_android.content.ContextWrapper_sendBroadcast",
+  "API_IPC_android.content.ContextWrapper_sendStickyBroadcast",
+  "API_IPC_android.content.ContextWrapper_startActivity",
+  "API_IPC_android.content.ContextWrapper_startService",
+  "API_IPC_android.content.ContextWrapper_stopService",
+  "API_IPC_android.content.ContextWrapper_registerReceiver"
+)
+
+id_apis <- c(
+  "API_DeviceInfo_android.telephony.TelephonyManager_getDeviceId",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getSubscriberId",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getLine1Number",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getDeviceSoftwareVersion",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getSimSerialNumber"
+)
+
+wifi_apis <- c(
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getMacAddress",
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getBSSID",
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getIpAddress",
+  "API_DeviceInfo_android.net.wifi.WifiInfo_getNetworkId"
+)
+
+accounts_apis <- c(
+  "API_DeviceData_android.accounts.AccountManager_getAccountsByType",
+  "API_DeviceData_android.accounts.AccountManager_getAccounts"
+)
+
+content_apis <- c(
+  "API_DeviceData_android.content.ContentResolver_query",
+  "API_DeviceData_android.content.ContentResolver_registerContentObserver",
+  "API_DeviceData_android.content.ContentResolver_insert",
+  "API_DeviceData_android.content.ContentResolver_delete"
+)
+
+location_apis <- c(
+  "API_DeviceData_android.location.Location_getLatitude",
+  "API_DeviceData_android.location.Location_getLongitude"
+)
+
+mic_apis <- c(
+  "API_DeviceData_android.media.AudioRecord_startRecording",
+  "API_DeviceData_android.media.MediaRecorder_start"
+)
+
+env_apis <- c(
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstallerPackageName",
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstalledApplications",
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstalledModules",
+  "API_DeviceInfo_android.content.pm.PackageManager_getInstalledPackages",
+  "API_DeviceData_android.app.ApplicationPackageManager_getInstalledPackages",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getNetworkOperator",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getNetworkOperatorName",
+  "API_DeviceInfo_android.telephony.TelephonyManager_getSimOperatorName",
+  "API_DeviceData_android.os.SystemProperties_get"
+)
+
+binder_apis <- c(
+  "API_Binder_android.app.ContextImpl_registerReceiver",
+  "API_Binder_android.app.ActivityThread_handleReceiver",
+  "API_Binder_android.app.Activity_startActivity"
+)
+
+ipc_all <- c(ipc_apis, binder_apis)
+
+# Helper function for safe rowSums
+safe_rowSums <- function(data, cols) {
+  cols <- intersect(cols, names(data))
+  if (length(cols) == 0) {
+    return(rep(0L, nrow(data)))
+  } else {
+    return(rowSums(as.matrix(data[, cols, drop = FALSE]), na.rm = TRUE))
+  }
+}
+```
+
+## Feature Engineering
+
+### Memory Features
+
+```{r}
+#| label: memory-features
+#| cache: true
+
+# Memory features for andmal_after
+andmal_after <- andmal_after %>%
+  mutate(
+    heap_util = if_else(
+      Memory_HeapSize > 0,
+      Memory_HeapAlloc / Memory_HeapSize,
+      NA_real_
+    ),
+    dirty_ratio = if_else(
+      Memory_PssTotal > 0,
+      (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal,
+      NA_real_
+    ),
+    shared_frac = if_else(
+      (Memory_SharedClean + Memory_PrivateClean) > 0,
+      Memory_SharedClean / (Memory_SharedClean + Memory_PrivateClean),
+      NA_real_
+    ),
+    log_PssTotal      = log10(Memory_PssTotal + 1),
+    log_Process_total = log10(Process_total + 1),
+    log_API_sessions  = log10(API__sessions + 1)
+  )
+gc()
+```
+
+### Webview Features
+
+```{r}
+#| label: webview-features
+#| cache: true
+
+webview_cols_present <- webview_cols[webview_cols %in% names(andmal_after)]
+andmal_after <- andmal_after %>%
+  mutate(
+    webview_calls = if (length(webview_cols_present) > 0) {
+      rowSums(as.matrix(.[, webview_cols_present, drop = FALSE]), na.rm = TRUE)
+    } else {
+      0
+    },
+    log_WebView_calls = log10(webview_calls + 1),
+    log_NetTxBytes    = log10(Network_TotalTransmittedBytes + 1),
+    log_NetRxBytes    = log10(Network_TotalReceivedBytes + 1)
+  )
+gc()
+```
+
+### Database Features
+
+```{r}
+#| label: database-features
+#| cache: true
+
+db_read_apis_present <- db_read_apis[db_read_apis %in% names(andmal_after)]
+db_write_apis_present <- db_write_apis[db_write_apis %in% names(andmal_after)]
+andmal_after <- andmal_after %>%
+  mutate(
+    total_DB_read_calls = if (length(db_read_apis_present) > 0) {
+      rowSums(as.matrix(.[, db_read_apis_present, drop = FALSE]), na.rm = TRUE)
+    } else {
+      0
+    },
+    total_DB_write_calls = if (length(db_write_apis_present) > 0) {
+      rowSums(as.matrix(.[, db_write_apis_present, drop = FALSE]), na.rm = TRUE)
+    } else {
+      0
+    },
+    log_DB_reads  = log10(total_DB_read_calls  + 1),
+    log_DB_writes = log10(total_DB_write_calls + 1)
+  )
+gc()
+```
+
+### Dex Features
+
+```{r}
+#| label: dex-features
+#| cache: true
+
+dex_apis_present <- dex_apis[dex_apis %in% names(andmal_after)]
+
+andmal_after <- andmal_after %>%
+  mutate(
+    dex_any = if (length(dex_apis_present) == 0) {
+      FALSE
+    } else {
+      rowSums(as.matrix(.[, dex_apis_present, drop = FALSE]), na.rm = TRUE) > 0
+    }
+  )
+gc()
+```
+
+### Crypto Features
+
+```{r}
+#| label: crypto-features
+#| cache: true
+
+crypto_apis_present  <- crypto_apis[crypto_apis %in% names(andmal_after)]
+base64_apis_present  <- base64_apis[base64_apis %in% names(andmal_after)]
+
+andmal_after <- andmal_after %>%
+  mutate(
+    crypto_calls = if (length(crypto_apis_present) == 0) {
+      0
+    } else {
+      rowSums(as.matrix(.[, crypto_apis_present, drop = FALSE]), na.rm = TRUE)
+    },
+    base64_calls = if (length(base64_apis_present) == 0) {
+      0
+    } else {
+      rowSums(as.matrix(.[, base64_apis_present, drop = FALSE]), na.rm = TRUE)
+    },
+    log_crypto  = log10(crypto_calls  + 1),
+    log_base64  = log10(base64_calls  + 1)
+  )
+gc()
+```
+
+### IPC Features
+
+```{r}
+#| label: ipc-features
+#| cache: true
+
+ipc_present <- ipc_all[ipc_all %in% names(andmal_after)]
+
+andmal_after <- andmal_after %>%
+  mutate(
+    has_broadcast = safe_rowSums(
+      andmal_after,
+      c(
+        "API_IPC_android.content.ContextWrapper_sendBroadcast",
+        "API_IPC_android.content.ContextWrapper_sendStickyBroadcast"
+      )
+    ) > 0,
+    has_service = safe_rowSums(
+      andmal_after,
+      c(
+        "API_IPC_android.content.ContextWrapper_startService",
+        "API_IPC_android.content.ContextWrapper_stopService"
+      )
+    ) > 0,
+    has_receiver = safe_rowSums(
+      andmal_after,
+      c(
+        "API_IPC_android.content.ContextWrapper_registerReceiver",
+        "API_Binder_android.app.ContextImpl_registerReceiver",
+        "API_Binder_android.app.ActivityThread_handleReceiver"
+      )
+    ) > 0,
+    has_activity = safe_rowSums(
+      andmal_after,
+      c(
+        "API_IPC_android.content.ContextWrapper_startActivity",
+        "API_Binder_android.app.Activity_startActivity"
+      )
+    ) > 0
+  )
+gc()
+```
+
+### Privacy Features
+
+```{r}
+#| label: privacy-features
+#| cache: true
+
+id_wifi_combined <- c(id_apis, wifi_apis)
+accounts_content_combined <- c(accounts_apis, content_apis)
+andmal_after <- andmal_after %>%
+  mutate(
+    id_calls       = safe_rowSums(andmal_after, id_wifi_combined),
+    accounts_calls = safe_rowSums(andmal_after, accounts_content_combined),
+    location_calls = safe_rowSums(andmal_after, location_apis),
+    mic_calls      = safe_rowSums(andmal_after, mic_apis),
+    env_calls      = safe_rowSums(andmal_after, env_apis),
+    PII_access_count   = id_calls + accounts_calls + location_calls + mic_calls,
+    env_probe_count    = env_calls,
+    log_PII_access  = log10(PII_access_count + 1),
+    log_env_probe   = log10(env_probe_count + 1),
+    has_ids       = id_calls       > 0,
+    has_accounts  = accounts_calls > 0,
+    has_location  = location_calls > 0,
+    has_mic       = mic_calls      > 0
+  )
+gc()
+```
+
+### Log Features
+
+```{r}
+#| label: log-features
+#| cache: true
+
+andmal_after <- andmal_after %>%
+  mutate(
+    log_Logcat_total  = log10(Logcat_total  + 1)
+  )
+
+cat("Feature engineering complete.\n")
+cat(sprintf("Final dataset: %d rows, %d columns\n", nrow(andmal_after), ncol(andmal_after)))
+gc()
+```
+
+## Feature Engineering for andmal_before (for EDA)
+
+```{r}
+#| label: before-features
+#| cache: true
+
+# Apply same feature engineering to andmal_before for EDA purposes
+# Memory features
+andmal_before <- andmal_before %>%
+  mutate(
+    heap_util = if_else(
+      Memory_HeapSize > 0,
+      Memory_HeapAlloc / Memory_HeapSize,
+      NA_real_
+    ),
+    dirty_ratio = if_else(
+      Memory_PssTotal > 0,
+      (Memory_PrivateDirty + Memory_SharedDirty) / Memory_PssTotal,
+      NA_real_
+    ),
+    shared_frac = if_else(
+      (Memory_SharedClean + Memory_PrivateClean) > 0,
+      Memory_SharedClean / (Memory_SharedClean + Memory_PrivateClean),
+      NA_real_
+    ),
+    log_PssTotal      = log10(Memory_PssTotal + 1),
+    log_Process_total = log10(Process_total + 1),
+    log_API_sessions  = log10(API__sessions + 1)
+  )
+
+# Webview features
+webview_cols_present_before <- webview_cols[webview_cols %in% names(andmal_before)]
+andmal_before <- andmal_before %>%
+  mutate(
+    webview_calls = if (length(webview_cols_present_before) > 0) {
+      rowSums(as.matrix(.[, webview_cols_present_before, drop = FALSE]), na.rm = TRUE)
+    } else {
+      0
+    },
+    log_WebView_calls = log10(webview_calls + 1),
+    log_NetTxBytes    = log10(Network_TotalTransmittedBytes + 1),
+    log_NetRxBytes    = log10(Network_TotalReceivedBytes + 1)
+  )
+
+# Database features
+db_read_apis_present_before <- db_read_apis[db_read_apis %in% names(andmal_before)]
+db_write_apis_present_before <- db_write_apis[db_write_apis %in% names(andmal_before)]
+andmal_before <- andmal_before %>%
+  mutate(
+    total_DB_read_calls = if (length(db_read_apis_present_before) > 0) {
+      rowSums(as.matrix(.[, db_read_apis_present_before, drop = FALSE]), na.rm = TRUE)
+    } else {
+      0
+    },
+    total_DB_write_calls = if (length(db_write_apis_present_before) > 0) {
+      rowSums(as.matrix(.[, db_write_apis_present_before, drop = FALSE]), na.rm = TRUE)
+    } else {
+      0
+    },
+    log_DB_reads  = log10(total_DB_read_calls  + 1),
+    log_DB_writes = log10(total_DB_write_calls + 1)
+  )
+
+# Dex features
+dex_apis_present_before <- dex_apis[dex_apis %in% names(andmal_before)]
+andmal_before <- andmal_before %>%
+  mutate(
+    dex_any = if (length(dex_apis_present_before) == 0) {
+      FALSE
+    } else {
+      rowSums(as.matrix(.[, dex_apis_present_before, drop = FALSE]), na.rm = TRUE) > 0
+    }
+  )
+
+# Crypto features
+crypto_apis_present_before  <- crypto_apis[crypto_apis %in% names(andmal_before)]
+base64_apis_present_before  <- base64_apis[base64_apis %in% names(andmal_before)]
+andmal_before <- andmal_before %>%
+  mutate(
+    crypto_calls = if (length(crypto_apis_present_before) == 0) {
+      0
+    } else {
+      rowSums(as.matrix(.[, crypto_apis_present_before, drop = FALSE]), na.rm = TRUE)
+    },
+    base64_calls = if (length(base64_apis_present_before) == 0) {
+      0
+    } else {
+      rowSums(as.matrix(.[, base64_apis_present_before, drop = FALSE]), na.rm = TRUE)
+    },
+    log_crypto  = log10(crypto_calls  + 1),
+    log_base64  = log10(base64_calls  + 1)
+  )
+
+# IPC features
+ipc_present_before <- ipc_all[ipc_all %in% names(andmal_before)]
+andmal_before <- andmal_before %>%
+  mutate(
+    has_broadcast = safe_rowSums(
+      andmal_before,
+      c(
+        "API_IPC_android.content.ContextWrapper_sendBroadcast",
+        "API_IPC_android.content.ContextWrapper_sendStickyBroadcast"
+      )
+    ) > 0,
+    has_service = safe_rowSums(
+      andmal_before,
+      c(
+        "API_IPC_android.content.ContextWrapper_startService",
+        "API_IPC_android.content.ContextWrapper_stopService"
+      )
+    ) > 0,
+    has_receiver = safe_rowSums(
+      andmal_before,
+      c(
+        "API_IPC_android.content.ContextWrapper_registerReceiver",
+        "API_Binder_android.app.ContextImpl_registerReceiver",
+        "API_Binder_android.app.ActivityThread_handleReceiver"
+      )
+    ) > 0,
+    has_activity = safe_rowSums(
+      andmal_before,
+      c(
+        "API_IPC_android.content.ContextWrapper_startActivity",
+        "API_Binder_android.app.Activity_startActivity"
+      )
+    ) > 0
+  )
+
+# Privacy features
+id_wifi_combined <- c(id_apis, wifi_apis)
+accounts_content_combined <- c(accounts_apis, content_apis)
+andmal_before <- andmal_before %>%
+  mutate(
+    id_calls       = safe_rowSums(andmal_before, id_wifi_combined),
+    accounts_calls = safe_rowSums(andmal_before, accounts_content_combined),
+    location_calls = safe_rowSums(andmal_before, location_apis),
+    mic_calls      = safe_rowSums(andmal_before, mic_apis),
+    env_calls      = safe_rowSums(andmal_before, env_apis),
+    PII_access_count   = id_calls + accounts_calls + location_calls + mic_calls,
+    env_probe_count    = env_calls,
+    log_PII_access  = log10(PII_access_count + 1),
+    log_env_probe   = log10(env_probe_count + 1),
+    has_ids       = id_calls       > 0,
+    has_accounts  = accounts_calls > 0,
+    has_location  = location_calls > 0,
+    has_mic       = mic_calls      > 0
+  )
+
+# Log features
+andmal_before <- andmal_before %>%
+  mutate(
+    log_Logcat_total  = log10(Logcat_total  + 1)
+  )
+
+# Add family rank colors to andmal_before
+fam_rank <- andmal_before %>%
+  count(Category, Family, sort = TRUE) %>%
+  group_by(Category) %>%
+  mutate(rank_in_cat = row_number()) %>%
+  ungroup()
+
+andmal_before <- andmal_before %>%
+  left_join(fam_rank, by = c("Category", "Family")) %>%
+  mutate(
+    rank_in_cat = if_else(is.na(rank_in_cat), Inf, rank_in_cat),
+    fam_color = case_when(
+      rank_in_cat == 1 ~ "red",
+      rank_in_cat == 2 ~ "blue",
+      rank_in_cat == 3 ~ "green",
+      rank_in_cat == 4 ~ "yellow",
+      TRUE             ~ "grey70"
+    )
+  )
+
+cat("Feature engineering for andmal_before complete.\n")
+gc()
+```
+
+## Save Processed Data
+
+```{r}
+#| label: save-processed-data
+#| cache: false
+
+# Save processed datasets
+saveRDS(andmal_after, "data/processed/andmal_after.rds")
+cat("Saved: data/processed/andmal_after.rds\n")
+
+saveRDS(andmal_before, "data/processed/andmal_before.rds")
+cat("Saved: data/processed/andmal_before.rds\n")
+
+# Save feature definitions for use in other documents
+feature_definitions <- list(
+  ui_features = ui_features,
+  dex_apis = dex_apis,
+  webview_cols = webview_cols,
+  fileio_apis = fileio_apis,
+  db_apis = db_apis,
+  db_read_apis = db_read_apis,
+  db_write_apis = db_write_apis,
+  crypto_apis = crypto_apis,
+  base64_apis = base64_apis,
+  ipc_apis = ipc_apis,
+  id_apis = id_apis,
+  wifi_apis = wifi_apis,
+  accounts_apis = accounts_apis,
+  content_apis = content_apis,
+  location_apis = location_apis,
+  mic_apis = mic_apis,
+  env_apis = env_apis,
+  binder_apis = binder_apis,
+  ipc_all = ipc_all,
+  filedb_apis = c(fileio_apis, db_apis)
+)
+
+saveRDS(feature_definitions, "data/processed/feature_definitions.rds")
+cat("Saved: data/processed/feature_definitions.rds\n")
+```
+

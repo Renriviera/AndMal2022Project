@@ -1,0 +1,25 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Android Malware Classification"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: preprocessing.qmd
+        text: Preprocessing
+      - href: category.qmd
+        text: Category Prediction
+      - href: family.qmd
+        text: Family Prediction
+      - href: proposal.qmd
+        text: Exploratory Analysis
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: false
+

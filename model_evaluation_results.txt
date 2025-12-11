@@ -1,0 +1,1020 @@
+Random Forest Models - Evaluation Results
+==========================================
+
+MODEL 1: Category Prediction
+----------------------------
+Training time: 0.2510458 minutes
+
+Overall Metrics:
+      Accuracy          Kappa  AccuracyLower  AccuracyUpper   AccuracyNull 
+     0.8016380      0.7609420      0.7903172      0.8126060      0.2712745 
+AccuracyPValue  McnemarPValue 
+     0.0000000            NaN 
+
+Per-Class Metrics:
+                      Sensitivity Specificity Pos Pred Value Neg Pred Value
+Class: Adware           0.9231518   0.9039718      0.7129977      0.9785034
+Class: Backdoor         0.6055046   0.9985706      0.9041096      0.9912832
+Class: FileInfector     0.4782609   0.9991973      0.7333333      0.9975957
+Class: No_Category      0.2272727   0.9968944      0.7272727      0.9725308
+Class: PUA              0.7040000   0.9985659      0.9263158      0.9924659
+Class: Ransomware       0.8322581   0.9825383      0.7588235      0.9888556
+Class: Riskware         0.8924890   0.9533991      0.8769899      0.9597130
+Class: Scareware        0.8452381   0.9975620      0.8554217      0.9973593
+Class: Trojan           0.8521739   0.9726256      0.8564295      0.9717004
+Class: Trojan_Banker    0.5000000   0.9989964      0.7058824      0.9975947
+Class: Trojan_Dropper   0.6027397   0.9952675      0.7927928      0.9881512
+Class: Trojan_SMS       0.6978022   0.9929519      0.7888199      0.9886481
+Class: Trojan_Spy       0.8840580   0.9964576      0.9150000      0.9950062
+Class: Zero_Day         0.5174825   0.9737820      0.6491228      0.9556175
+                      Precision    Recall        F1  Prevalence Detection Rate
+Class: Adware         0.7129977 0.9231518 0.8045782 0.205353576    0.189572513
+Class: Backdoor       0.9041096 0.6055046 0.7252747 0.021773871    0.013184179
+Class: FileInfector   0.7333333 0.4782609 0.5789474 0.004594487    0.002197363
+Class: No_Category    0.7272727 0.2272727 0.3463203 0.035157811    0.007990412
+Class: PUA            0.9263158 0.7040000 0.8000000 0.024970036    0.017578905
+Class: Ransomware     0.7588235 0.8322581 0.7938462 0.061925689    0.051538154
+Class: Riskware       0.8769899 0.8924890 0.8846715 0.271274471    0.242109469
+Class: Scareware      0.8554217 0.8452381 0.8502994 0.016779864    0.014182980
+Class: Trojan         0.8564295 0.8521739 0.8542964 0.160807032    0.137035557
+Class: Trojan_Banker  0.7058824 0.5000000 0.5853659 0.004794247    0.002397123
+Class: Trojan_Dropper 0.7927928 0.6027397 0.6848249 0.029165002    0.017578905
+Class: Trojan_SMS     0.7888199 0.6978022 0.7405248 0.036356372    0.025369557
+Class: Trojan_Spy     0.9150000 0.8840580 0.8992629 0.041350380    0.036556133
+Class: Zero_Day       0.6491228 0.5174825 0.5758755 0.085697163    0.044346784
+                      Detection Prevalence Balanced Accuracy
+Class: Adware                  0.265880943         0.9135618
+Class: Backdoor                0.014582501         0.8020376
+Class: FileInfector            0.002996404         0.7387291
+Class: No_Category             0.010986816         0.6120836
+Class: PUA                     0.018977227         0.8512829
+Class: Ransomware              0.067918498         0.9073982
+Class: Riskware                0.276068718         0.9229440
+Class: Scareware               0.016580104         0.9214000
+Class: Trojan                  0.160007990         0.9123997
+Class: Trojan_Banker           0.003395925         0.7494982
+Class: Trojan_Dropper          0.022173392         0.7990036
+Class: Trojan_SMS              0.032161406         0.8453771
+Class: Trojan_Spy              0.039952058         0.9402578
+Class: Zero_Day                0.068318018         0.7456322
+
+Confusion Matrix:
+                Reference
+Prediction       Adware Backdoor FileInfector No_Category  PUA Ransomware
+  Adware            949       27            7          69   18          3
+  Backdoor            0       66            0           1    0          0
+  FileInfector        4        0           11           0    0          0
+  No_Category         2        0            0          40    0          1
+  PUA                 1        0            0           2   88          0
+  Ransomware          1        0            1          12    0        258
+  Riskware           42       12            2          11   10          3
+  Scareware           1        1            0           1    0          0
+  Trojan              9        2            0          10    4          6
+  Trojan_Banker       0        0            0           0    0          1
+  Trojan_Dropper      0        0            0           1    0         17
+  Trojan_SMS          1        0            0           8    0          4
+  Trojan_Spy          0        0            0           3    0         11
+  Zero_Day           18        1            2          18    5          6
+                Reference
+Prediction       Riskware Scareware Trojan Trojan_Banker Trojan_Dropper
+  Adware               75         6     45             4              4
+  Backdoor              5         0      1             0              0
+  FileInfector          0         0      0             0              0
+  No_Category           2         0      4             1              0
+  PUA                   2         0      1             0              0
+  Ransomware            2         0      5             3             40
+  Riskware           1212         0     25             0              3
+  Scareware             1        71      0             0              0
+  Trojan               26         1    686             1              6
+  Trojan_Banker         0         0      2            12              1
+  Trojan_Dropper        0         0      1             2             88
+  Trojan_SMS            4         0      6             0              2
+  Trojan_Spy            2         0      1             0              0
+  Zero_Day             27         6     28             1              2
+                Reference
+Prediction       Trojan_SMS Trojan_Spy Zero_Day
+  Adware                 29          5       90
+  Backdoor                0          0        0
+  FileInfector            0          0        0
+  No_Category             1          0        4
+  PUA                     0          1        0
+  Ransomware              1          5       12
+  Riskware                3          3       56
+  Scareware               0          0        8
+  Trojan                 20          5       25
+  Trojan_Banker           0          0        1
+  Trojan_Dropper          0          0        2
+  Trojan_SMS            127          0        9
+  Trojan_Spy              0        183        0
+  Zero_Day                1          5      222
+
+
+MODELS 2a-2c: Category-Specific Family Prediction
+==================================================
+
+Model 2a: Adware Family Prediction
+----------------------------------------
+Training time: 0.03759899 minutes
+
+Overall Metrics:
+Accuracy: 0.8577075 
+
+Per-Class Metrics:
+                    Sensitivity Specificity Pos Pred Value Neg Pred Value
+Class: mobidash       0.8571429   0.9936776      0.9000000      0.9905462
+Class: pandaad        0.0000000   1.0000000            NaN      0.9990119
+Class: dowgin         0.8255814   0.9460043      0.5867769      0.9831650
+Class: baiduprotect   1.0000000   0.9979757      0.9230769      1.0000000
+Class: stopsms        0.0000000   1.0000000            NaN      0.9980237
+Class: shedun         0.9960317   0.9960526      0.9881890      0.9986807
+Class: mulad          0.2631579   1.0000000      1.0000000      0.9860973
+Class: inoco          0.9920000   0.9966178      0.9763780      0.9988701
+Class: ewind          0.5937500   0.9948980      0.7916667      0.9868421
+Class: airpush        0.9792746   0.9413919      0.7974684      0.9948387
+Class: kuguo          0.5744681   0.9927461      0.7941176      0.9795501
+Class: adflex         0.7500000   0.9989879      0.9473684      0.9939577
+Class: appad          0.0000000   1.0000000            NaN      0.9970356
+Class: inmobi         0.8529412   0.9867076      0.6904762      0.9948454
+Class: adwo           0.2222222   1.0000000      1.0000000      0.9930693
+Class: leadbolt       0.3888889   1.0000000      1.0000000      0.9890547
+Class: zdtad          0.3333333   0.9990060      0.6666667      0.9960357
+Class: adend          1.0000000   1.0000000      1.0000000      1.0000000
+Class: mobclick       0.5000000   1.0000000      1.0000000      0.9980198
+Class: sprovider      0.0000000   1.0000000            NaN      0.9990119
+Class: wooboo         1.0000000   1.0000000      1.0000000      1.0000000
+Class: kyview         0.5000000   1.0000000      1.0000000      0.9980198
+Class: feiwo          0.5000000   1.0000000      1.0000000      0.9970268
+Class: appsgeyser     0.7142857   0.9960199      0.5555556      0.9980060
+Class: kyhub                 NA   1.0000000             NA             NA
+Class: plague                NA   1.0000000             NA             NA
+Class: igexin         0.0000000   1.0000000            NaN      0.9990119
+Class: domob          0.1428571   1.0000000      1.0000000      0.9940653
+Class: adviator       0.0000000   1.0000000            NaN      0.9980237
+Class: fictus         0.4285714   1.0000000      1.0000000      0.9960357
+Class: admogo         0.0000000   1.0000000            NaN      0.9980237
+Class: adcolony       0.0000000   1.0000000            NaN      0.9990119
+Class: frupi          1.0000000   1.0000000      1.0000000      1.0000000
+Class: mobisec        1.0000000   0.9990099      0.6666667      1.0000000
+Class: batmobi               NA   1.0000000             NA             NA
+Class: dianle         0.0000000   1.0000000            NaN      0.9990119
+Class: kalfere               NA   1.0000000             NA             NA
+Class: hiddenad              NA   1.0000000             NA             NA
+Class: xynyin                NA   1.0000000             NA             NA
+Class: viser          0.0000000   1.0000000            NaN      0.9990119
+Class: accutrack             NA   1.0000000             NA             NA
+Class: ganlet                NA   1.0000000             NA             NA
+                    Precision    Recall        F1   Prevalence Detection Rate
+Class: mobidash     0.9000000 0.8571429 0.8780488 0.0622529644   0.0533596838
+Class: pandaad             NA 0.0000000        NA 0.0009881423   0.0000000000
+Class: dowgin       0.5867769 0.8255814 0.6859903 0.0849802372   0.0701581028
+Class: baiduprotect 0.9230769 1.0000000 0.9600000 0.0237154150   0.0237154150
+Class: stopsms             NA 0.0000000        NA 0.0019762846   0.0000000000
+Class: shedun       0.9881890 0.9960317 0.9920949 0.2490118577   0.2480237154
+Class: mulad        1.0000000 0.2631579 0.4166667 0.0187747036   0.0049407115
+Class: inoco        0.9763780 0.9920000 0.9841270 0.1235177866   0.1225296443
+Class: ewind        0.7916667 0.5937500 0.6785714 0.0316205534   0.0187747036
+Class: airpush      0.7974684 0.9792746 0.8790698 0.1907114625   0.1867588933
+Class: kuguo        0.7941176 0.5744681 0.6666667 0.0464426877   0.0266798419
+Class: adflex       0.9473684 0.7500000 0.8372093 0.0237154150   0.0177865613
+Class: appad               NA 0.0000000        NA 0.0029644269   0.0000000000
+Class: inmobi       0.6904762 0.8529412 0.7631579 0.0335968379   0.0286561265
+Class: adwo         1.0000000 0.2222222 0.3636364 0.0088932806   0.0019762846
+Class: leadbolt     1.0000000 0.3888889 0.5600000 0.0177865613   0.0069169960
+Class: zdtad        0.6666667 0.3333333 0.4444444 0.0059288538   0.0019762846
+Class: adend        1.0000000 1.0000000 1.0000000 0.0247035573   0.0247035573
+Class: mobclick     1.0000000 0.5000000 0.6666667 0.0039525692   0.0019762846
+Class: sprovider           NA 0.0000000        NA 0.0009881423   0.0000000000
+Class: wooboo       1.0000000 1.0000000 1.0000000 0.0009881423   0.0009881423
+Class: kyview       1.0000000 0.5000000 0.6666667 0.0039525692   0.0019762846
+Class: feiwo        1.0000000 0.5000000 0.6666667 0.0059288538   0.0029644269
+Class: appsgeyser   0.5555556 0.7142857 0.6250000 0.0069169960   0.0049407115
+Class: kyhub               NA        NA        NA 0.0000000000   0.0000000000
+Class: plague              NA        NA        NA 0.0000000000   0.0000000000
+Class: igexin              NA 0.0000000        NA 0.0009881423   0.0000000000
+Class: domob        1.0000000 0.1428571 0.2500000 0.0069169960   0.0009881423
+Class: adviator            NA 0.0000000        NA 0.0019762846   0.0000000000
+Class: fictus       1.0000000 0.4285714 0.6000000 0.0069169960   0.0029644269
+Class: admogo              NA 0.0000000        NA 0.0019762846   0.0000000000
+Class: adcolony            NA 0.0000000        NA 0.0009881423   0.0000000000
+Class: frupi        1.0000000 1.0000000 1.0000000 0.0019762846   0.0019762846
+Class: mobisec      0.6666667 1.0000000 0.8000000 0.0019762846   0.0019762846
+Class: batmobi             NA        NA        NA 0.0000000000   0.0000000000
+Class: dianle              NA 0.0000000        NA 0.0009881423   0.0000000000
+Class: kalfere             NA        NA        NA 0.0000000000   0.0000000000
+Class: hiddenad            NA        NA        NA 0.0000000000   0.0000000000
+Class: xynyin              NA        NA        NA 0.0000000000   0.0000000000
+Class: viser               NA 0.0000000        NA 0.0009881423   0.0000000000
+Class: accutrack           NA        NA        NA 0.0000000000   0.0000000000
+Class: ganlet              NA        NA        NA 0.0000000000   0.0000000000
+                    Detection Prevalence Balanced Accuracy
+Class: mobidash             0.0592885375         0.9254102
+Class: pandaad              0.0000000000         0.5000000
+Class: dowgin               0.1195652174         0.8857929
+Class: baiduprotect         0.0256916996         0.9989879
+Class: stopsms              0.0000000000         0.5000000
+Class: shedun               0.2509881423         0.9960422
+Class: mulad                0.0049407115         0.6315789
+Class: inoco                0.1254940711         0.9943089
+Class: ewind                0.0237154150         0.7943240
+Class: airpush              0.2341897233         0.9603333
+Class: kuguo                0.0335968379         0.7836071
+Class: adflex               0.0187747036         0.8744939
+Class: appad                0.0000000000         0.5000000
+Class: inmobi               0.0415019763         0.9198244
+Class: adwo                 0.0019762846         0.6111111
+Class: leadbolt             0.0069169960         0.6944444
+Class: zdtad                0.0029644269         0.6661696
+Class: adend                0.0247035573         1.0000000
+Class: mobclick             0.0019762846         0.7500000
+Class: sprovider            0.0000000000         0.5000000
+Class: wooboo               0.0009881423         1.0000000
+Class: kyview               0.0019762846         0.7500000
+Class: feiwo                0.0029644269         0.7500000
+Class: appsgeyser           0.0088932806         0.8551528
+Class: kyhub                0.0000000000                NA
+Class: plague               0.0000000000                NA
+Class: igexin               0.0000000000         0.5000000
+Class: domob                0.0009881423         0.5714286
+Class: adviator             0.0000000000         0.5000000
+Class: fictus               0.0029644269         0.7142857
+Class: admogo               0.0000000000         0.5000000
+Class: adcolony             0.0000000000         0.5000000
+Class: frupi                0.0019762846         1.0000000
+Class: mobisec              0.0029644269         0.9995050
+Class: batmobi              0.0000000000                NA
+Class: dianle               0.0000000000         0.5000000
+Class: kalfere              0.0000000000                NA
+Class: hiddenad             0.0000000000                NA
+Class: xynyin               0.0000000000                NA
+Class: viser                0.0000000000         0.5000000
+Class: accutrack            0.0000000000                NA
+Class: ganlet               0.0000000000                NA
+
+Confusion Matrix:
+              Reference
+Prediction     mobidash pandaad dowgin baiduprotect stopsms shedun mulad inoco
+  mobidash           54       0      2            0       0      0     0     0
+  pandaad             0       0      0            0       0      0     0     0
+  dowgin              1       0     71            0       0      1     2     0
+  baiduprotect        0       0      1           24       0      0     0     0
+  stopsms             0       0      0            0       0      0     0     0
+  shedun              0       0      2            0       0    251     0     0
+  mulad               0       0      0            0       0      0     5     0
+  inoco               0       0      1            0       0      0     0   124
+  ewind               0       0      1            0       0      0     0     0
+  airpush             8       1      3            0       2      0     1     0
+  kuguo               0       0      5            0       0      0     0     0
+  adflex              0       0      0            0       0      0     0     0
+  appad               0       0      0            0       0      0     0     0
+  inmobi              0       0      0            0       0      0    11     0
+  adwo                0       0      0            0       0      0     0     0
+  leadbolt            0       0      0            0       0      0     0     0
+  zdtad               0       0      0            0       0      0     0     1
+  adend               0       0      0            0       0      0     0     0
+  mobclick            0       0      0            0       0      0     0     0
+  sprovider           0       0      0            0       0      0     0     0
+  wooboo              0       0      0            0       0      0     0     0
+  kyview              0       0      0            0       0      0     0     0
+  feiwo               0       0      0            0       0      0     0     0
+  appsgeyser          0       0      0            0       0      0     0     0
+  kyhub               0       0      0            0       0      0     0     0
+  plague              0       0      0            0       0      0     0     0
+  igexin              0       0      0            0       0      0     0     0
+  domob               0       0      0            0       0      0     0     0
+  adviator            0       0      0            0       0      0     0     0
+  fictus              0       0      0            0       0      0     0     0
+  admogo              0       0      0            0       0      0     0     0
+  adcolony            0       0      0            0       0      0     0     0
+  frupi               0       0      0            0       0      0     0     0
+  mobisec             0       0      0            0       0      0     0     0
+  batmobi             0       0      0            0       0      0     0     0
+  dianle              0       0      0            0       0      0     0     0
+  kalfere             0       0      0            0       0      0     0     0
+  hiddenad            0       0      0            0       0      0     0     0
+  xynyin              0       0      0            0       0      0     0     0
+  viser               0       0      0            0       0      0     0     0
+  accutrack           0       0      0            0       0      0     0     0
+  ganlet              0       0      0            0       0      0     0     0
+              Reference
+Prediction     ewind airpush kuguo adflex appad inmobi adwo leadbolt zdtad
+  mobidash         0       1     1      0     0      0    1        0     0
+  pandaad          0       0     0      0     0      0    0        0     0
+  dowgin           6       2    16      3     2      1    6        0     2
+  baiduprotect     0       0     0      0     0      0    0        0     0
+  stopsms          0       0     0      0     0      0    0        0     0
+  shedun           0       0     0      0     0      0    0        0     0
+  mulad            0       0     0      0     0      0    0        0     0
+  inoco            0       0     0      0     0      0    0        0     2
+  ewind           19       1     0      0     1      0    0        1     0
+  airpush          6     189     3      3     0      2    0       10     0
+  kuguo            0       0    27      0     0      0    0        0     0
+  adflex           0       0     0     18     0      0    0        0     0
+  appad            0       0     0      0     0      0    0        0     0
+  inmobi           0       0     0      0     0     29    0        0     0
+  adwo             0       0     0      0     0      0    2        0     0
+  leadbolt         0       0     0      0     0      0    0        7     0
+  zdtad            0       0     0      0     0      0    0        0     2
+  adend            0       0     0      0     0      0    0        0     0
+  mobclick         0       0     0      0     0      0    0        0     0
+  sprovider        0       0     0      0     0      0    0        0     0
+  wooboo           0       0     0      0     0      0    0        0     0
+  kyview           0       0     0      0     0      0    0        0     0
+  feiwo            0       0     0      0     0      0    0        0     0
+  appsgeyser       0       0     0      0     0      2    0        0     0
+  kyhub            0       0     0      0     0      0    0        0     0
+  plague           0       0     0      0     0      0    0        0     0
+  igexin           0       0     0      0     0      0    0        0     0
+  domob            0       0     0      0     0      0    0        0     0
+  adviator         0       0     0      0     0      0    0        0     0
+  fictus           0       0     0      0     0      0    0        0     0
+  admogo           0       0     0      0     0      0    0        0     0
+  adcolony         0       0     0      0     0      0    0        0     0
+  frupi            0       0     0      0     0      0    0        0     0
+  mobisec          1       0     0      0     0      0    0        0     0
+  batmobi          0       0     0      0     0      0    0        0     0
+  dianle           0       0     0      0     0      0    0        0     0
+  kalfere          0       0     0      0     0      0    0        0     0
+  hiddenad         0       0     0      0     0      0    0        0     0
+  xynyin           0       0     0      0     0      0    0        0     0
+  viser            0       0     0      0     0      0    0        0     0
+  accutrack        0       0     0      0     0      0    0        0     0
+  ganlet           0       0     0      0     0      0    0        0     0
+              Reference
+Prediction     adend mobclick sprovider wooboo kyview feiwo appsgeyser kyhub
+  mobidash         0        0         0      0      0     0          0     0
+  pandaad          0        0         0      0      0     0          0     0
+  dowgin           0        1         0      0      0     2          0     0
+  baiduprotect     0        0         0      0      0     1          0     0
+  stopsms          0        0         0      0      0     0          0     0
+  shedun           0        0         0      0      1     0          0     0
+  mulad            0        0         0      0      0     0          0     0
+  inoco            0        0         0      0      0     0          0     0
+  ewind            0        0         0      0      0     0          0     0
+  airpush          0        1         1      0      1     0          0     0
+  kuguo            0        0         0      0      0     0          0     0
+  adflex           0        0         0      0      0     0          0     0
+  appad            0        0         0      0      0     0          0     0
+  inmobi           0        0         0      0      0     0          2     0
+  adwo             0        0         0      0      0     0          0     0
+  leadbolt         0        0         0      0      0     0          0     0
+  zdtad            0        0         0      0      0     0          0     0
+  adend           25        0         0      0      0     0          0     0
+  mobclick         0        2         0      0      0     0          0     0
+  sprovider        0        0         0      0      0     0          0     0
+  wooboo           0        0         0      1      0     0          0     0
+  kyview           0        0         0      0      2     0          0     0
+  feiwo            0        0         0      0      0     3          0     0
+  appsgeyser       0        0         0      0      0     0          5     0
+  kyhub            0        0         0      0      0     0          0     0
+  plague           0        0         0      0      0     0          0     0
+  igexin           0        0         0      0      0     0          0     0
+  domob            0        0         0      0      0     0          0     0
+  adviator         0        0         0      0      0     0          0     0
+  fictus           0        0         0      0      0     0          0     0
+  admogo           0        0         0      0      0     0          0     0
+  adcolony         0        0         0      0      0     0          0     0
+  frupi            0        0         0      0      0     0          0     0
+  mobisec          0        0         0      0      0     0          0     0
+  batmobi          0        0         0      0      0     0          0     0
+  dianle           0        0         0      0      0     0          0     0
+  kalfere          0        0         0      0      0     0          0     0
+  hiddenad         0        0         0      0      0     0          0     0
+  xynyin           0        0         0      0      0     0          0     0
+  viser            0        0         0      0      0     0          0     0
+  accutrack        0        0         0      0      0     0          0     0
+  ganlet           0        0         0      0      0     0          0     0
+              Reference
+Prediction     plague igexin domob adviator fictus admogo adcolony frupi
+  mobidash          0      0     0        1      0      0        0     0
+  pandaad           0      0     0        0      0      0        0     0
+  dowgin            0      0     3        0      0      2        0     0
+  baiduprotect      0      0     0        0      0      0        0     0
+  stopsms           0      0     0        0      0      0        0     0
+  shedun            0      0     0        0      0      0        0     0
+  mulad             0      0     0        0      0      0        0     0
+  inoco             0      0     0        0      0      0        0     0
+  ewind             0      0     0        0      0      0        1     0
+  airpush           0      0     1        1      4      0        0     0
+  kuguo             0      0     1        0      0      0        0     0
+  adflex            0      1     0        0      0      0        0     0
+  appad             0      0     0        0      0      0        0     0
+  inmobi            0      0     0        0      0      0        0     0
+  adwo              0      0     0        0      0      0        0     0
+  leadbolt          0      0     0        0      0      0        0     0
+  zdtad             0      0     0        0      0      0        0     0
+  adend             0      0     0        0      0      0        0     0
+  mobclick          0      0     0        0      0      0        0     0
+  sprovider         0      0     0        0      0      0        0     0
+  wooboo            0      0     0        0      0      0        0     0
+  kyview            0      0     0        0      0      0        0     0
+  feiwo             0      0     0        0      0      0        0     0
+  appsgeyser        0      0     1        0      0      0        0     0
+  kyhub             0      0     0        0      0      0        0     0
+  plague            0      0     0        0      0      0        0     0
+  igexin            0      0     0        0      0      0        0     0
+  domob             0      0     1        0      0      0        0     0
+  adviator          0      0     0        0      0      0        0     0
+  fictus            0      0     0        0      3      0        0     0
+  admogo            0      0     0        0      0      0        0     0
+  adcolony          0      0     0        0      0      0        0     0
+  frupi             0      0     0        0      0      0        0     2
+  mobisec           0      0     0        0      0      0        0     0
+  batmobi           0      0     0        0      0      0        0     0
+  dianle            0      0     0        0      0      0        0     0
+  kalfere           0      0     0        0      0      0        0     0
+  hiddenad          0      0     0        0      0      0        0     0
+  xynyin            0      0     0        0      0      0        0     0
+  viser             0      0     0        0      0      0        0     0
+  accutrack         0      0     0        0      0      0        0     0
+  ganlet            0      0     0        0      0      0        0     0
+              Reference
+Prediction     mobisec batmobi dianle kalfere hiddenad xynyin viser accutrack
+  mobidash           0       0      0       0        0      0     0         0
+  pandaad            0       0      0       0        0      0     0         0
+  dowgin             0       0      0       0        0      0     0         0
+  baiduprotect       0       0      0       0        0      0     0         0
+  stopsms            0       0      0       0        0      0     0         0
+  shedun             0       0      0       0        0      0     0         0
+  mulad              0       0      0       0        0      0     0         0
+  inoco              0       0      0       0        0      0     0         0
+  ewind              0       0      0       0        0      0     0         0
+  airpush            0       0      0       0        0      0     0         0
+  kuguo              0       0      1       0        0      0     0         0
+  adflex             0       0      0       0        0      0     0         0
+  appad              0       0      0       0        0      0     0         0
+  inmobi             0       0      0       0        0      0     0         0
+  adwo               0       0      0       0        0      0     0         0
+  leadbolt           0       0      0       0        0      0     0         0
+  zdtad              0       0      0       0        0      0     0         0
+  adend              0       0      0       0        0      0     0         0
+  mobclick           0       0      0       0        0      0     0         0
+  sprovider          0       0      0       0        0      0     0         0
+  wooboo             0       0      0       0        0      0     0         0
+  kyview             0       0      0       0        0      0     0         0
+  feiwo              0       0      0       0        0      0     0         0
+  appsgeyser         0       0      0       0        0      0     1         0
+  kyhub              0       0      0       0        0      0     0         0
+  plague             0       0      0       0        0      0     0         0
+  igexin             0       0      0       0        0      0     0         0
+  domob              0       0      0       0        0      0     0         0
+  adviator           0       0      0       0        0      0     0         0
+  fictus             0       0      0       0        0      0     0         0
+  admogo             0       0      0       0        0      0     0         0
+  adcolony           0       0      0       0        0      0     0         0
+  frupi              0       0      0       0        0      0     0         0
+  mobisec            2       0      0       0        0      0     0         0
+  batmobi            0       0      0       0        0      0     0         0
+  dianle             0       0      0       0        0      0     0         0
+  kalfere            0       0      0       0        0      0     0         0
+  hiddenad           0       0      0       0        0      0     0         0
+  xynyin             0       0      0       0        0      0     0         0
+  viser              0       0      0       0        0      0     0         0
+  accutrack          0       0      0       0        0      0     0         0
+  ganlet             0       0      0       0        0      0     0         0
+              Reference
+Prediction     ganlet
+  mobidash          0
+  pandaad           0
+  dowgin            0
+  baiduprotect      0
+  stopsms           0
+  shedun            0
+  mulad             0
+  inoco             0
+  ewind             0
+  airpush           0
+  kuguo             0
+  adflex            0
+  appad             0
+  inmobi            0
+  adwo              0
+  leadbolt          0
+  zdtad             0
+  adend             0
+  mobclick          0
+  sprovider         0
+  wooboo            0
+  kyview            0
+  feiwo             0
+  appsgeyser        0
+  kyhub             0
+  plague            0
+  igexin            0
+  domob             0
+  adviator          0
+  fictus            0
+  admogo            0
+  adcolony          0
+  frupi             0
+  mobisec           0
+  batmobi           0
+  dianle            0
+  kalfere           0
+  hiddenad          0
+  xynyin            0
+  viser             0
+  accutrack         0
+  ganlet            0
+
+Model 2b: Riskware Family Prediction
+----------------------------------------
+Training time: 0.03525285 minutes
+
+Overall Metrics:
+Accuracy: 0.8971893 
+
+Per-Class Metrics:
+                      Sensitivity Specificity Pos Pred Value Neg Pred Value
+Class: smsreg           0.9874372   0.8237410      0.8891403      0.9786325
+Class: skymobi          0.9887218   0.9861878      0.9460432      0.9972067
+Class: smspay           0.5000000   0.9953052      0.8604651      0.9717341
+Class: <unknown>        0.0000000   0.9984532      0.0000000      0.9562963
+Class: jiagu            0.9333333   0.9962179      0.8484848      0.9984837
+Class: revmob           0.9333333   0.9912837      0.8842105      0.9952267
+Class: mobilepay        0.7777778   1.0000000      1.0000000      0.9985130
+Class: anydown          0.5000000   0.9992571      0.7500000      0.9977745
+Class: triada           0.1333333   0.9992521      0.6666667      0.9903632
+Class: wificrack        1.0000000   1.0000000      1.0000000      1.0000000
+Class: dnotua           0.3333333   1.0000000      1.0000000      0.9985196
+Class: wapron           1.0000000   1.0000000      1.0000000      1.0000000
+Class: metasploit       0.0000000   1.0000000            NaN      0.9985207
+Class: tordow                  NA   1.0000000             NA             NA
+Class: deng                    NA   1.0000000             NA             NA
+Class: secneo                  NA   1.0000000             NA             NA
+Class: tencentprotect          NA   1.0000000             NA             NA
+Class: kingroot                NA   1.0000000             NA             NA
+                      Precision    Recall        F1  Prevalence Detection Rate
+Class: smsreg         0.8891403 0.9874372 0.9357143 0.588757396    0.581360947
+Class: skymobi        0.9460432 0.9887218 0.9669118 0.196745562    0.194526627
+Class: smspay         0.8604651 0.5000000 0.6324786 0.054733728    0.027366864
+Class: <unknown>      0.0000000 0.0000000       NaN 0.043639053    0.000000000
+Class: jiagu          0.8484848 0.9333333 0.8888889 0.022189349    0.020710059
+Class: revmob         0.8842105 0.9333333 0.9081081 0.066568047    0.062130178
+Class: mobilepay      1.0000000 0.7777778 0.8750000 0.006656805    0.005177515
+Class: anydown        0.7500000 0.5000000 0.6000000 0.004437870    0.002218935
+Class: triada         0.6666667 0.1333333 0.2222222 0.011094675    0.001479290
+Class: wificrack      1.0000000 1.0000000 1.0000000 0.000739645    0.000739645
+Class: dnotua         1.0000000 0.3333333 0.5000000 0.002218935    0.000739645
+Class: wapron         1.0000000 1.0000000 1.0000000 0.000739645    0.000739645
+Class: metasploit            NA 0.0000000        NA 0.001479290    0.000000000
+Class: tordow                NA        NA        NA 0.000000000    0.000000000
+Class: deng                  NA        NA        NA 0.000000000    0.000000000
+Class: secneo                NA        NA        NA 0.000000000    0.000000000
+Class: tencentprotect        NA        NA        NA 0.000000000    0.000000000
+Class: kingroot              NA        NA        NA 0.000000000    0.000000000
+                      Detection Prevalence Balanced Accuracy
+Class: smsreg                  0.653846154         0.9055891
+Class: skymobi                 0.205621302         0.9874548
+Class: smspay                  0.031804734         0.7476526
+Class: <unknown>               0.001479290         0.4992266
+Class: jiagu                   0.024408284         0.9647756
+Class: revmob                  0.070266272         0.9623085
+Class: mobilepay               0.005177515         0.8888889
+Class: anydown                 0.002958580         0.7496285
+Class: triada                  0.002218935         0.5662927
+Class: wificrack               0.000739645         1.0000000
+Class: dnotua                  0.000739645         0.6666667
+Class: wapron                  0.000739645         1.0000000
+Class: metasploit              0.000000000         0.5000000
+Class: tordow                  0.000000000                NA
+Class: deng                    0.000000000                NA
+Class: secneo                  0.000000000                NA
+Class: tencentprotect          0.000000000                NA
+Class: kingroot                0.000000000                NA
+
+Confusion Matrix:
+                Reference
+Prediction       smsreg skymobi smspay <unknown> jiagu revmob mobilepay anydown
+  smsreg            786       3     34        39     1      4         2       2
+  skymobi             1     263      0        14     0      0         0       0
+  smspay              3       0     37         1     1      1         0       0
+  <unknown>           0       0      0         0     0      1         0       0
+  jiagu               2       0      1         1    28      0         0       0
+  revmob              3       0      2         3     0     84         0       1
+  mobilepay           0       0      0         0     0      0         7       0
+  anydown             0       0      0         1     0      0         0       3
+  triada              1       0      0         0     0      0         0       0
+  wificrack           0       0      0         0     0      0         0       0
+  dnotua              0       0      0         0     0      0         0       0
+  wapron              0       0      0         0     0      0         0       0
+  metasploit          0       0      0         0     0      0         0       0
+  tordow              0       0      0         0     0      0         0       0
+  deng                0       0      0         0     0      0         0       0
+  secneo              0       0      0         0     0      0         0       0
+  tencentprotect      0       0      0         0     0      0         0       0
+  kingroot            0       0      0         0     0      0         0       0
+                Reference
+Prediction       triada wificrack dnotua wapron metasploit tordow deng secneo
+  smsreg             11         0      1      0          1      0    0      0
+  skymobi             0         0      0      0          0      0    0      0
+  smspay              0         0      0      0          0      0    0      0
+  <unknown>           0         0      1      0          0      0    0      0
+  jiagu               1         0      0      0          0      0    0      0
+  revmob              1         0      0      0          1      0    0      0
+  mobilepay           0         0      0      0          0      0    0      0
+  anydown             0         0      0      0          0      0    0      0
+  triada              2         0      0      0          0      0    0      0
+  wificrack           0         1      0      0          0      0    0      0
+  dnotua              0         0      1      0          0      0    0      0
+  wapron              0         0      0      1          0      0    0      0
+  metasploit          0         0      0      0          0      0    0      0
+  tordow              0         0      0      0          0      0    0      0
+  deng                0         0      0      0          0      0    0      0
+  secneo              0         0      0      0          0      0    0      0
+  tencentprotect      0         0      0      0          0      0    0      0
+  kingroot            0         0      0      0          0      0    0      0
+                Reference
+Prediction       tencentprotect kingroot
+  smsreg                      0        0
+  skymobi                     0        0
+  smspay                      0        0
+  <unknown>                   0        0
+  jiagu                       0        0
+  revmob                      0        0
+  mobilepay                   0        0
+  anydown                     0        0
+  triada                      0        0
+  wificrack                   0        0
+  dnotua                      0        0
+  wapron                      0        0
+  metasploit                  0        0
+  tordow                      0        0
+  deng                        0        0
+  secneo                      0        0
+  tencentprotect              0        0
+  kingroot                    0        0
+
+Model 2c: Trojan Family Prediction
+----------------------------------------
+Training time: 0.0213797 minutes
+
+Overall Metrics:
+Accuracy: 0.8738966 
+
+Per-Class Metrics:
+                       Sensitivity Specificity Pos Pred Value Neg Pred Value
+Class: drosel                   NA   1.0000000             NA             NA
+Class: rootnik          0.87500000   1.0000000      1.0000000      0.9987277
+Class: autoins          0.90476190   0.9972603      0.9661017      0.9918256
+Class: smsagent         0.99038462   0.9753266      0.8583333      0.9985141
+Class: styricka         0.94174757   0.9898551      0.9326923      0.9912917
+Class: mseg             0.57142857   0.9961489      0.7272727      0.9923274
+Class: gappusin         0.95714286   0.9571231      0.6836735      0.9956835
+Class: mytrackp         1.00000000   0.9801653      0.9400000      1.0000000
+Class: ginmaster        0.11111111   1.0000000      1.0000000      0.9898990
+Class: lotoor           0.98529412   0.9958621      0.9571429      0.9986169
+Class: <unknown>        0.02439024   0.9973404      0.3333333      0.9493671
+Class: wkload           0.95652174   0.9987013      0.9565217      0.9987013
+Class: mobtes           0.87500000   0.9843953      0.6363636      0.9960526
+Class: rusms            1.00000000   1.0000000      1.0000000      1.0000000
+Class: autosms          0.88461538   0.9973924      0.9200000      0.9960938
+Class: syringe          0.00000000   1.0000000            NaN      0.9974779
+Class: hypay            0.90000000   1.0000000      1.0000000      0.9987245
+Class: boogr            0.55555556   0.9987245      0.8333333      0.9949174
+Class: iconosys         0.00000000   1.0000000            NaN      0.9974779
+Class: cnsms                    NA   1.0000000             NA             NA
+Class: qysly            0.50000000   1.0000000      1.0000000      0.9987374
+Class: oveead                   NA   1.0000000             NA             NA
+Class: basebridge       0.00000000   1.0000000            NaN      0.9974779
+Class: typstu           0.00000000   1.0000000            NaN      0.9974779
+Class: droiddreamlight          NA   1.0000000             NA             NA
+Class: walkfree                 NA   1.0000000             NA             NA
+Class: hyspu            0.66666667   0.9923175      0.5714286      0.9948652
+Class: hiddenapp        1.00000000   1.0000000      1.0000000      1.0000000
+Class: uten             1.00000000   1.0000000      1.0000000      1.0000000
+Class: autoinst         0.00000000   1.0000000            NaN      0.9987390
+Class: systemmonitor    0.50000000   0.9987358      0.5000000      0.9987358
+Class: xinyinhe         0.00000000   1.0000000            NaN      0.9987390
+Class: uupay                    NA   1.0000000             NA             NA
+Class: gluper                   NA   1.0000000             NA             NA
+Class: wintertiger              NA   1.0000000             NA             NA
+Class: obtes                    NA   1.0000000             NA             NA
+Class: coinge                   NA   1.0000000             NA             NA
+                       Precision     Recall         F1  Prevalence
+Class: drosel                 NA         NA         NA 0.000000000
+Class: rootnik         1.0000000 0.87500000 0.93333333 0.010088272
+Class: autoins         0.9661017 0.90476190 0.93442623 0.079445145
+Class: smsagent        0.8583333 0.99038462 0.91964286 0.131147541
+Class: styricka        0.9326923 0.94174757 0.93719807 0.129886507
+Class: mseg            0.7272727 0.57142857 0.64000000 0.017654477
+Class: gappusin        0.6836735 0.95714286 0.79761905 0.088272383
+Class: mytrackp        0.9400000 1.00000000 0.96907216 0.237074401
+Class: ginmaster       1.0000000 0.11111111 0.20000000 0.011349306
+Class: lotoor          0.9571429 0.98529412 0.97101449 0.085750315
+Class: <unknown>       0.3333333 0.02439024 0.04545455 0.051702396
+Class: wkload          0.9565217 0.95652174 0.95652174 0.029003783
+Class: mobtes          0.6363636 0.87500000 0.73684211 0.030264817
+Class: rusms           1.0000000 1.00000000 1.00000000 0.002522068
+Class: autosms         0.9200000 0.88461538 0.90196078 0.032786885
+Class: syringe                NA 0.00000000         NA 0.002522068
+Class: hypay           1.0000000 0.90000000 0.94736842 0.012610340
+Class: boogr           0.8333333 0.55555556 0.66666667 0.011349306
+Class: iconosys               NA 0.00000000         NA 0.002522068
+Class: cnsms                  NA         NA         NA 0.000000000
+Class: qysly           1.0000000 0.50000000 0.66666667 0.002522068
+Class: oveead                 NA         NA         NA 0.000000000
+Class: basebridge             NA 0.00000000         NA 0.002522068
+Class: typstu                 NA 0.00000000         NA 0.002522068
+Class: droiddreamlight        NA         NA         NA 0.000000000
+Class: walkfree               NA         NA         NA 0.000000000
+Class: hyspu           0.5714286 0.66666667 0.61538462 0.015132409
+Class: hiddenapp       1.0000000 1.00000000 1.00000000 0.005044136
+Class: uten            1.0000000 1.00000000 1.00000000 0.001261034
+Class: autoinst               NA 0.00000000         NA 0.001261034
+Class: systemmonitor   0.5000000 0.50000000 0.50000000 0.002522068
+Class: xinyinhe               NA 0.00000000         NA 0.001261034
+Class: uupay                  NA         NA         NA 0.000000000
+Class: gluper                 NA         NA         NA 0.000000000
+Class: wintertiger            NA         NA         NA 0.000000000
+Class: obtes                  NA         NA         NA 0.000000000
+Class: coinge                 NA         NA         NA 0.000000000
+                       Detection Rate Detection Prevalence Balanced Accuracy
+Class: drosel             0.000000000          0.000000000                NA
+Class: rootnik            0.008827238          0.008827238         0.9375000
+Class: autoins            0.071878941          0.074401009         0.9510111
+Class: smsagent           0.129886507          0.151324086         0.9828556
+Class: styricka           0.122320303          0.131147541         0.9658013
+Class: mseg               0.010088272          0.013871375         0.7837887
+Class: gappusin           0.084489281          0.123581337         0.9571330
+Class: mytrackp           0.237074401          0.252206810         0.9900826
+Class: ginmaster          0.001261034          0.001261034         0.5555556
+Class: lotoor             0.084489281          0.088272383         0.9905781
+Class: <unknown>          0.001261034          0.003783102         0.5108653
+Class: wkload             0.027742749          0.029003783         0.9776115
+Class: mobtes             0.026481715          0.041614124         0.9296977
+Class: rusms              0.002522068          0.002522068         1.0000000
+Class: autosms            0.029003783          0.031525851         0.9410039
+Class: syringe            0.000000000          0.000000000         0.5000000
+Class: hypay              0.011349306          0.011349306         0.9500000
+Class: boogr              0.006305170          0.007566204         0.7771400
+Class: iconosys           0.000000000          0.000000000         0.5000000
+Class: cnsms              0.000000000          0.000000000                NA
+Class: qysly              0.001261034          0.001261034         0.7500000
+Class: oveead             0.000000000          0.000000000                NA
+Class: basebridge         0.000000000          0.000000000         0.5000000
+Class: typstu             0.000000000          0.000000000         0.5000000
+Class: droiddreamlight    0.000000000          0.000000000                NA
+Class: walkfree           0.000000000          0.000000000                NA
+Class: hyspu              0.010088272          0.017654477         0.8294921
+Class: hiddenapp          0.005044136          0.005044136         1.0000000
+Class: uten               0.001261034          0.001261034         1.0000000
+Class: autoinst           0.000000000          0.000000000         0.5000000
+Class: systemmonitor      0.001261034          0.002522068         0.7493679
+Class: xinyinhe           0.000000000          0.000000000         0.5000000
+Class: uupay              0.000000000          0.000000000                NA
+Class: gluper             0.000000000          0.000000000                NA
+Class: wintertiger        0.000000000          0.000000000                NA
+Class: obtes              0.000000000          0.000000000                NA
+Class: coinge             0.000000000          0.000000000                NA
+
+Confusion Matrix:
+                 Reference
+Prediction        drosel rootnik autoins smsagent styricka mseg gappusin
+  drosel               0       0       0        0        0    0        0
+  rootnik              0       7       0        0        0    0        0
+  autoins              0       0      57        0        0    0        0
+  smsagent             0       0       0      103        0    2        0
+  styricka             0       0       1        1       97    0        1
+  mseg                 0       0       0        0        0    8        1
+  gappusin             0       1       5        0        4    4       67
+  mytrackp             0       0       0        0        0    0        0
+  ginmaster            0       0       0        0        0    0        0
+  lotoor               0       0       0        0        0    0        0
+  <unknown>            0       0       0        0        0    0        0
+  wkload               0       0       0        0        0    0        0
+  mobtes               0       0       0        0        1    0        0
+  rusms                0       0       0        0        0    0        0
+  autosms              0       0       0        0        1    0        0
+  syringe              0       0       0        0        0    0        0
+  hypay                0       0       0        0        0    0        0
+  boogr                0       0       0        0        0    0        0
+  iconosys             0       0       0        0        0    0        0
+  cnsms                0       0       0        0        0    0        0
+  qysly                0       0       0        0        0    0        0
+  oveead               0       0       0        0        0    0        0
+  basebridge           0       0       0        0        0    0        0
+  typstu               0       0       0        0        0    0        0
+  droiddreamlight      0       0       0        0        0    0        0
+  walkfree             0       0       0        0        0    0        0
+  hyspu                0       0       0        0        0    0        0
+  hiddenapp            0       0       0        0        0    0        0
+  uten                 0       0       0        0        0    0        0
+  autoinst             0       0       0        0        0    0        0
+  systemmonitor        0       0       0        0        0    0        1
+  xinyinhe             0       0       0        0        0    0        0
+  uupay                0       0       0        0        0    0        0
+  gluper               0       0       0        0        0    0        0
+  wintertiger          0       0       0        0        0    0        0
+  obtes                0       0       0        0        0    0        0
+  coinge               0       0       0        0        0    0        0
+                 Reference
+Prediction        mytrackp ginmaster lotoor <unknown> wkload mobtes rusms
+  drosel                 0         0      0         0      0      0     0
+  rootnik                0         0      0         0      0      0     0
+  autoins                0         0      0         2      0      0     0
+  smsagent               0         0      1         5      0      3     0
+  styricka               0         0      0         3      0      0     0
+  mseg                   0         1      0         0      0      0     0
+  gappusin               0         6      0         6      0      0     0
+  mytrackp             188         0      0        12      0      0     0
+  ginmaster              0         1      0         0      0      0     0
+  lotoor                 0         0     67         2      0      0     0
+  <unknown>              0         0      0         1      0      0     0
+  wkload                 0         0      0         1     22      0     0
+  mobtes                 0         1      0         1      1     21     0
+  rusms                  0         0      0         0      0      0     2
+  autosms                0         0      0         1      0      0     0
+  syringe                0         0      0         0      0      0     0
+  hypay                  0         0      0         0      0      0     0
+  boogr                  0         0      0         1      0      0     0
+  iconosys               0         0      0         0      0      0     0
+  cnsms                  0         0      0         0      0      0     0
+  qysly                  0         0      0         0      0      0     0
+  oveead                 0         0      0         0      0      0     0
+  basebridge             0         0      0         0      0      0     0
+  typstu                 0         0      0         0      0      0     0
+  droiddreamlight        0         0      0         0      0      0     0
+  walkfree               0         0      0         0      0      0     0
+  hyspu                  0         0      0         6      0      0     0
+  hiddenapp              0         0      0         0      0      0     0
+  uten                   0         0      0         0      0      0     0
+  autoinst               0         0      0         0      0      0     0
+  systemmonitor          0         0      0         0      0      0     0
+  xinyinhe               0         0      0         0      0      0     0
+  uupay                  0         0      0         0      0      0     0
+  gluper                 0         0      0         0      0      0     0
+  wintertiger            0         0      0         0      0      0     0
+  obtes                  0         0      0         0      0      0     0
+  coinge                 0         0      0         0      0      0     0
+                 Reference
+Prediction        autosms syringe hypay boogr iconosys cnsms qysly oveead
+  drosel                0       0     0     0        0     0     0      0
+  rootnik               0       0     0     0        0     0     0      0
+  autoins               0       0     0     0        0     0     0      0
+  smsagent              1       1     0     1        0     0     0      0
+  styricka              0       0     0     0        0     0     0      0
+  mseg                  0       0     0     1        0     0     0      0
+  gappusin              0       1     0     1        0     0     1      0
+  mytrackp              0       0     0     0        0     0     0      0
+  ginmaster             0       0     0     0        0     0     0      0
+  lotoor                0       0     0     0        0     0     0      0
+  <unknown>             1       0     0     0        0     0     0      0
+  wkload                0       0     0     0        0     0     0      0
+  mobtes                1       0     1     1        2     0     0      0
+  rusms                 0       0     0     0        0     0     0      0
+  autosms              23       0     0     0        0     0     0      0
+  syringe               0       0     0     0        0     0     0      0
+  hypay                 0       0     9     0        0     0     0      0
+  boogr                 0       0     0     5        0     0     0      0
+  iconosys              0       0     0     0        0     0     0      0
+  cnsms                 0       0     0     0        0     0     0      0
+  qysly                 0       0     0     0        0     0     1      0
+  oveead                0       0     0     0        0     0     0      0
+  basebridge            0       0     0     0        0     0     0      0
+  typstu                0       0     0     0        0     0     0      0
+  droiddreamlight       0       0     0     0        0     0     0      0
+  walkfree              0       0     0     0        0     0     0      0
+  hyspu                 0       0     0     0        0     0     0      0
+  hiddenapp             0       0     0     0        0     0     0      0
+  uten                  0       0     0     0        0     0     0      0
+  autoinst              0       0     0     0        0     0     0      0
+  systemmonitor         0       0     0     0        0     0     0      0
+  xinyinhe              0       0     0     0        0     0     0      0
+  uupay                 0       0     0     0        0     0     0      0
+  gluper                0       0     0     0        0     0     0      0
+  wintertiger           0       0     0     0        0     0     0      0
+  obtes                 0       0     0     0        0     0     0      0
+  coinge                0       0     0     0        0     0     0      0
+                 Reference
+Prediction        basebridge typstu droiddreamlight walkfree hyspu hiddenapp
+  drosel                   0      0               0        0     0         0
+  rootnik                  0      0               0        0     0         0
+  autoins                  0      0               0        0     0         0
+  smsagent                 0      0               0        0     2         0
+  styricka                 1      0               0        0     0         0
+  mseg                     0      0               0        0     0         0
+  gappusin                 0      0               0        0     0         0
+  mytrackp                 0      0               0        0     0         0
+  ginmaster                0      0               0        0     0         0
+  lotoor                   0      0               0        0     1         0
+  <unknown>                0      0               0        0     1         0
+  wkload                   0      0               0        0     0         0
+  mobtes                   1      2               0        0     0         0
+  rusms                    0      0               0        0     0         0
+  autosms                  0      0               0        0     0         0
+  syringe                  0      0               0        0     0         0
+  hypay                    0      0               0        0     0         0
+  boogr                    0      0               0        0     0         0
+  iconosys                 0      0               0        0     0         0
+  cnsms                    0      0               0        0     0         0
+  qysly                    0      0               0        0     0         0
+  oveead                   0      0               0        0     0         0
+  basebridge               0      0               0        0     0         0
+  typstu                   0      0               0        0     0         0
+  droiddreamlight          0      0               0        0     0         0
+  walkfree                 0      0               0        0     0         0
+  hyspu                    0      0               0        0     8         0
+  hiddenapp                0      0               0        0     0         4
+  uten                     0      0               0        0     0         0
+  autoinst                 0      0               0        0     0         0
+  systemmonitor            0      0               0        0     0         0
+  xinyinhe                 0      0               0        0     0         0
+  uupay                    0      0               0        0     0         0
+  gluper                   0      0               0        0     0         0
+  wintertiger              0      0               0        0     0         0
+  obtes                    0      0               0        0     0         0
+  coinge                   0      0               0        0     0         0
+                 Reference
+Prediction        uten autoinst systemmonitor xinyinhe uupay gluper wintertiger
+  drosel             0        0             0        0     0      0           0
+  rootnik            0        0             0        0     0      0           0
+  autoins            0        0             0        0     0      0           0
+  smsagent           0        0             0        1     0      0           0
+  styricka           0        0             0        0     0      0           0
+  mseg               0        0             0        0     0      0           0
+  gappusin           0        1             1        0     0      0           0
+  mytrackp           0        0             0        0     0      0           0
+  ginmaster          0        0             0        0     0      0           0
+  lotoor             0        0             0        0     0      0           0
+  <unknown>          0        0             0        0     0      0           0
+  wkload             0        0             0        0     0      0           0
+  mobtes             0        0             0        0     0      0           0
+  rusms              0        0             0        0     0      0           0
+  autosms            0        0             0        0     0      0           0
+  syringe            0        0             0        0     0      0           0
+  hypay              0        0             0        0     0      0           0
+  boogr              0        0             0        0     0      0           0
+  iconosys           0        0             0        0     0      0           0
+  cnsms              0        0             0        0     0      0           0
+  qysly              0        0             0        0     0      0           0
+  oveead             0        0             0        0     0      0           0
+  basebridge         0        0             0        0     0      0           0
+  typstu             0        0             0        0     0      0           0
+  droiddreamlight    0        0             0        0     0      0           0
+  walkfree           0        0             0        0     0      0           0
+  hyspu              0        0             0        0     0      0           0
+  hiddenapp          0        0             0        0     0      0           0
+  uten               1        0             0        0     0      0           0
+  autoinst           0        0             0        0     0      0           0
+  systemmonitor      0        0             1        0     0      0           0
+  xinyinhe           0        0             0        0     0      0           0
+  uupay              0        0             0        0     0      0           0
+  gluper             0        0             0        0     0      0           0
+  wintertiger        0        0             0        0     0      0           0
+  obtes              0        0             0        0     0      0           0
+  coinge             0        0             0        0     0      0           0
+                 Reference
+Prediction        obtes coinge
+  drosel              0      0
+  rootnik             0      0
+  autoins             0      0
+  smsagent            0      0
+  styricka            0      0
+  mseg                0      0
+  gappusin            0      0
+  mytrackp            0      0
+  ginmaster           0      0
+  lotoor              0      0
+  <unknown>           0      0
+  wkload              0      0
+  mobtes              0      0
+  rusms               0      0
+  autosms             0      0
+  syringe             0      0
+  hypay               0      0
+  boogr               0      0
+  iconosys            0      0
+  cnsms               0      0
+  qysly               0      0
+  oveead              0      0
+  basebridge          0      0
+  typstu              0      0
+  droiddreamlight     0      0
+  walkfree            0      0
+  hyspu               0      0
+  hiddenapp           0      0
+  uten                0      0
+  autoinst            0      0
+  systemmonitor       0      0
+  xinyinhe            0      0
+  uupay               0      0
+  gluper              0      0
+  wintertiger         0      0
+  obtes               0      0
+  coinge              0      0
+
+
+Data Summary
+------------
+Total samples: 25059 
+Training samples: 20053 
+Test samples: 5006 
+Model 1 features: 179 
+Family prediction features: 179 
+Number of trees per model: 500 
+Threads used: 8 
+
+Category-specific family models created:
+  - Adware: 42 families predicted
+  - Riskware: 18 families predicted
+  - Trojan: 37 families predicted

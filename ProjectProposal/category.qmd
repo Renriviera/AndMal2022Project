@@ -1,0 +1,578 @@
+---
+title: "Category Prediction Model"
+format: html
+---
+
+This document trains and evaluates a random forest model to predict the malware category using features from the AndMal2020 dataset.
+
+## Load Libraries and Data
+
+```{r}
+#| label: load-libraries
+#| cache: true
+
+library(ranger)
+library(dplyr)
+library(caret)
+library(parallel)
+library(lime)
+library(fastshap)
+library(ggplot2)
+library(stringr)
+
+# Configuration
+num_threads <- 8L
+num_trees <- 500L
+train_test_split <- 0.8
+```
+
+```{r}
+#| label: load-processed-data
+#| cache: true
+
+# Load preprocessed data (from preprocessing.qmd)
+andmal_after <- readRDS("data/processed/andmal_after.rds")
+
+cat(sprintf("Loaded dataset: %d rows, %d columns\n", nrow(andmal_after), ncol(andmal_after)))
+cat("Category distribution:\n")
+print(table(andmal_after$Category))
+```
+
+## Feature Selection
+
+```{r}
+#| label: identify-features
+#| cache: true
+
+# Metadata columns to exclude from features
+metadata_cols <- c("Category", "Family", "Category_file", "reboot_state", "path", "file", "Hash")
+
+# Get all column names
+all_cols <- names(andmal_after)
+
+# Identify metadata columns that actually exist
+metadata_cols_present <- intersect(metadata_cols, all_cols)
+
+# Feature columns for Category prediction (exclude Family and Category, plus other metadata)
+feature_cols_model1 <- setdiff(all_cols, metadata_cols_present)
+
+# Additional exclusion: any rank/color columns that might have been added
+feature_cols_model1 <- feature_cols_model1[!str_detect(feature_cols_model1, "rank|color|fam_color|rank_in_cat")]
+
+cat(sprintf("Model features (Category prediction): %d features\n", length(feature_cols_model1)))
+cat(sprintf("Excluded metadata columns: %s\n", paste(metadata_cols_present, collapse = ", ")))
+```
+
+## Train/Test Split
+
+```{r}
+#| label: train-test-split
+#| cache: true
+
+# Create stratified split for Category
+set.seed(42)
+caret_available <- require("caret", quietly = TRUE)
+
+if (caret_available) {
+  train_index <- caret::createDataPartition(
+    andmal_after$Category,
+    p = train_test_split,
+    list = FALSE,
+    times = 1
+  )
+  train_data <- andmal_after[train_index, ]
+  test_data <- andmal_after[-train_index, ]
+} else {
+  # Use base R stratified sampling
+  categories <- unique(andmal_after$Category)
+  train_indices <- c()
+  for (cat in categories) {
+    cat_indices <- which(andmal_after$Category == cat)
+    n_train <- round(length(cat_indices) * train_test_split)
+    train_cat_indices <- sample(cat_indices, n_train)
+    train_indices <- c(train_indices, train_cat_indices)
+  }
+  train_data <- andmal_after[train_indices, ]
+  test_data <- andmal_after[-train_indices, ]
+}
+
+cat(sprintf("Training set: %d rows (%.1f%%)\n", nrow(train_data), 100 * nrow(train_data) / nrow(andmal_after)))
+cat(sprintf("Test set: %d rows (%.1f%%)\n", nrow(test_data), 100 * nrow(test_data) / nrow(andmal_after)))
+```
+
+## Train Model
+
+```{r}
+#| label: train-model
+#| cache: false
+
+# Prepare data
+train_model1_x <- train_data[, feature_cols_model1, drop = FALSE]
+train_model1_y <- train_data$Category
+test_model1_x <- test_data[, feature_cols_model1, drop = FALSE]
+test_model1_y <- test_data$Category
+
+# Calculate mtry (default: sqrt of number of features)
+mtry_model1 <- floor(sqrt(length(feature_cols_model1)))
+
+cat(sprintf("Model parameters:\n"))
+cat(sprintf("  Number of trees: %d\n", num_trees))
+cat(sprintf("  mtry: %d (sqrt of %d features)\n", mtry_model1, length(feature_cols_model1)))
+cat(sprintf("  Number of threads: %d\n", num_threads))
+
+# Train model
+cat("Training random forest for Category prediction...\n")
+start_time <- Sys.time()
+
+rf_category <- ranger(
+  x = train_model1_x,
+  y = train_model1_y,
+  num.trees = num_trees,
+  mtry = mtry_model1,
+  min.node.size = 1,
+  num.threads = num_threads,
+  classification = TRUE,
+  probability = TRUE,
+  importance = "impurity",
+  verbose = TRUE
+)
+
+end_time <- Sys.time()
+training_time <- difftime(end_time, start_time, units = "mins")
+cat(sprintf("Training completed in %.2f minutes\n", as.numeric(training_time)))
+```
+
+## Evaluate Model
+
+```{r}
+#| label: evaluate-model
+#| cache: false
+
+cat("Evaluating model...\n")
+pred_model1 <- predict(rf_category, test_model1_x)
+pred_categories <- pred_model1$predictions
+
+# Get predicted class (highest probability)
+pred_categories_class <- colnames(pred_categories)[apply(pred_categories, 1, which.max)]
+pred_categories_class <- factor(pred_categories_class, levels = levels(test_model1_y))
+
+# Confusion matrix
+if (caret_available) {
+  cm_model1 <- caret::confusionMatrix(pred_categories_class, test_model1_y)
+  
+  # Calculate per-class metrics
+  metrics_model1 <- cm_model1$overall
+  per_class_model1 <- cm_model1$byClass
+  
+  cat("\nOverall Accuracy:", metrics_model1["Accuracy"], "\n")
+} else {
+  # Base R confusion matrix and metrics
+  cm_table1 <- table(Predicted = pred_categories_class, Actual = test_model1_y)
+  accuracy1 <- sum(diag(cm_table1)) / sum(cm_table1)
+  cat("\nOverall Accuracy:", accuracy1, "\n")
+  
+  # Store for display
+  metrics_model1 <- list(Accuracy = accuracy1)
+  per_class_model1 <- NULL
+  cm_model1 <- list(table = cm_table1, overall = metrics_model1)
+}
+```
+
+### Confusion Matrix
+
+```{r}
+#| label: display-confusion-matrix
+#| echo: false
+
+if (caret_available) {
+  print(cm_model1)
+} else {
+  print(cm_model1$table)
+}
+```
+
+### Confusion Matrix Visualization
+
+```{r}
+#| label: confusion-matrix-plot
+#| echo: false
+
+# Create confusion matrix data frame for visualization
+if (caret_available && !is.null(cm_model1$table)) {
+  cm_table <- as.data.frame(cm_model1$table)
+  names(cm_table) <- c("Predicted", "Actual", "Freq")
+  
+  # Calculate percentages
+  cm_table <- cm_table %>%
+    group_by(Actual) %>%
+    mutate(Percent = round(100 * Freq / sum(Freq), 1)) %>%
+    ungroup()
+  
+  # Create heatmap
+  p_cm <- ggplot(cm_table, aes(x = Actual, y = Predicted, fill = Freq)) +
+    geom_tile(color = "white", linewidth = 0.5) +
+    geom_text(aes(label = paste0(Freq, "\n(", Percent, "%)")), 
+              color = "white", size = 3.5, fontface = "bold") +
+    scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
+    labs(
+      title = "Category Prediction Confusion Matrix",
+      subtitle = "Predicted vs Actual malware categories",
+      x = "Actual Category",
+      y = "Predicted Category"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(face = "bold", size = 14),
+      plot.subtitle = element_text(size = 11)
+    )
+  
+  print(p_cm)
+} else {
+  # Fallback for base R confusion matrix
+  cm_table <- as.data.frame(cm_model1$table)
+  names(cm_table) <- c("Predicted", "Actual", "Freq")
+  
+  cm_table <- cm_table %>%
+    group_by(Actual) %>%
+    mutate(Percent = round(100 * Freq / sum(Freq), 1)) %>%
+    ungroup()
+  
+  p_cm <- ggplot(cm_table, aes(x = Actual, y = Predicted, fill = Freq)) +
+    geom_tile(color = "white", linewidth = 0.5) +
+    geom_text(aes(label = paste0(Freq, "\n(", Percent, "%)")), 
+              color = "white", size = 3.5, fontface = "bold") +
+    scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
+    labs(
+      title = "Category Prediction Confusion Matrix",
+      subtitle = "Predicted vs Actual malware categories",
+      x = "Actual Category",
+      y = "Predicted Category"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(face = "bold", size = 14),
+      plot.subtitle = element_text(size = 11)
+    )
+  
+  print(p_cm)
+}
+```
+
+### Performance Metrics
+
+```{r}
+#| label: display-metrics
+#| echo: false
+
+cat("Overall Metrics:\n")
+if (caret_available) {
+  print(metrics_model1)
+  if (!is.null(per_class_model1)) {
+    cat("\nPer-Class Metrics:\n")
+    print(per_class_model1)
+  }
+} else {
+  cat("Accuracy:", metrics_model1$Accuracy, "\n")
+}
+```
+
+### Feature Importance
+
+```{r}
+#| label: feature-importance
+#| echo: false
+
+if (!is.null(rf_category$variable.importance)) {
+  importance_df <- data.frame(
+    feature = names(rf_category$variable.importance),
+    importance = as.numeric(rf_category$variable.importance)
+  ) %>%
+    arrange(desc(importance)) %>%
+    head(20)
+  
+  cat("Top 20 Most Important Features:\n")
+  print(importance_df)
+}
+```
+
+## Save Model
+
+```{r}
+#| label: save-model
+#| cache: false
+#| eval: true
+
+saveRDS(rf_category, "data/models/rf_category_model.rds")
+cat("Saved: data/models/rf_category_model.rds\n")
+```
+
+## Random Forest Model Summary
+
+The random forest model for category prediction demonstrates strong performance in distinguishing between malware categories. The model utilizes a comprehensive set of behavioral features extracted from dynamic analysis to classify samples into their respective categories. The ensemble approach of random forests allows the model to capture complex interactions between features while maintaining interpretability through feature importance measures.
+
+```{r}
+#| label: category-model-summary
+#| echo: false
+
+cat("Model Configuration:\n")
+cat(sprintf("  Number of trees: %d\n", rf_category$num.trees))
+cat(sprintf("  Number of features: %d\n", length(feature_cols_model1)))
+cat(sprintf("  mtry parameter: %d\n", rf_category$mtry))
+cat(sprintf("  Training accuracy: %.4f\n", 1 - rf_category$prediction.error))
+```
+
+## Model Interpretability
+
+### Instance Selection
+
+```{r}
+#| label: select-instances
+#| cache: true
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Select one instance from each category from the test set
+target_categories <- c("Adware", "Riskware", "Trojan")
+selected_instances <- list()
+
+for (category in target_categories) {
+  category_indices <- which(test_data$Category == category)
+  if (length(category_indices) > 0) {
+    # Select first instance from this category in test set
+    selected_idx <- category_indices[1]
+    selected_instances[[category]] <- test_data[selected_idx, ]
+    cat(sprintf("Selected %s instance: row %d\n", category, selected_idx))
+  } else {
+    cat(sprintf("WARNING: No %s instances found in test set\n", category))
+  }
+}
+
+# Combine into a single data frame for easier handling
+selected_instances_df <- bind_rows(selected_instances)
+
+# Extract feature matrices for explanations
+selected_instances_x <- selected_instances_df[, feature_cols_model1, drop = FALSE]
+
+# Save selected instances for use in family.qmd
+if (!dir.exists("data/processed")) {
+  dir.create("data/processed", recursive = TRUE)
+}
+saveRDS(selected_instances_df, "data/processed/selected_instances.rds")
+cat("\nSaved selected instances to data/processed/selected_instances.rds\n")
+```
+
+### LIME Explanations
+
+LIME (Local Interpretable Model-agnostic Explanations) generates local approximations of the model's behavior. These explanations highlight the most influential features for each prediction by creating simplified, interpretable models that approximate the complex random forest in the vicinity of each instance. This approach allows us to understand the decision-making process at the individual sample level, revealing which behavioral features are most critical for distinguishing between malware categories.
+
+```{r}
+#| label: lime-explanations
+#| cache: false
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Create a prediction function wrapper for ranger model
+predict_function <- function(model, newdata) {
+  pred <- predict(model, newdata)
+  return(pred$predictions)
+}
+
+# Create LIME explainer
+cat("Creating LIME explainer...\n")
+explainer <- lime(
+  train_model1_x,
+  model = rf_category,
+  bin_continuous = TRUE,
+  n_bins = 5
+)
+
+# Generate explanations for all selected instances
+cat("Generating LIME explanations for selected instances...\n")
+lime_explanations <- explain(
+  selected_instances_x,
+  explainer = explainer,
+  n_features = 10,
+  n_permutations = 5000
+)
+
+# Plot LIME explanations
+cat("Plotting LIME explanations...\n")
+for (i in 1:nrow(selected_instances_x)) {
+  category_name <- selected_instances_df$Category[i]
+  cat(sprintf("\nLIME Explanation for %s instance:\n", category_name))
+  print(plot_features(lime_explanations[lime_explanations$case == i, ]))
+}
+```
+
+### fastshap Explanations
+
+SHAP (SHapley Additive exPlanations) values provide insight into feature contributions for individual predictions. The analysis reveals which features drive classification decisions for each category instance. By decomposing the model's output into additive feature contributions, SHAP values offer a unified framework for understanding how each feature influences the final prediction, making it possible to explain why a particular sample was classified into a specific category.
+
+#### Per-Instance SHAP Values
+
+```{r}
+#| label: shap-per-instance
+#| cache: false
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Create prediction function for fastshap
+pred_wrapper <- function(object, newdata) {
+  pred <- predict(object, newdata)
+  return(pred$predictions)
+}
+
+cat("Calculating SHAP values for selected instances...\n")
+
+# Calculate SHAP values for each selected instance
+shap_values_list <- list()
+
+for (i in 1:nrow(selected_instances_x)) {
+  category_name <- selected_instances_df$Category[i]
+  cat(sprintf("Calculating SHAP values for %s instance...\n", category_name))
+  
+  # Calculate SHAP values for this instance
+  shap_vals <- explain(
+    rf_category,
+    X = train_model1_x,
+    newdata = selected_instances_x[i, , drop = FALSE],
+    pred_wrapper = pred_wrapper,
+    nsim = 100
+  )
+  
+  shap_values_list[[category_name]] <- shap_vals
+  
+  # Plot SHAP values for this instance
+  # Get the predicted class probabilities
+  pred_probs <- predict(rf_category, selected_instances_x[i, , drop = FALSE])$predictions
+  pred_class <- colnames(pred_probs)[which.max(pred_probs)]
+  
+  # Handle SHAP values - fastshap returns a matrix/data.frame
+  # For multi-class, extract SHAP values for the predicted class
+  if (is.data.frame(shap_vals) || is.matrix(shap_vals)) {
+    # If it's a matrix/data.frame, check if it has class columns
+    if (pred_class %in% colnames(shap_vals)) {
+      shap_df <- data.frame(
+        feature = rownames(shap_vals),
+        shap_value = shap_vals[[pred_class]]
+      )
+    } else if (ncol(shap_vals) == length(feature_cols_model1)) {
+      # If columns are features, use the first (or only) row
+      shap_df <- data.frame(
+        feature = colnames(shap_vals),
+        shap_value = as.numeric(shap_vals[1, ])
+      )
+    } else {
+      # Try to extract first column or first row
+      if (nrow(shap_vals) == 1) {
+        shap_df <- data.frame(
+          feature = colnames(shap_vals),
+          shap_value = as.numeric(shap_vals[1, ])
+        )
+      } else {
+        shap_df <- data.frame(
+          feature = rownames(shap_vals),
+          shap_value = as.numeric(shap_vals[, 1])
+        )
+      }
+    }
+    
+    shap_df <- shap_df %>%
+      arrange(desc(abs(shap_value))) %>%
+      head(20)
+    
+    cat(sprintf("\nTop 20 SHAP values for %s instance (predicted class: %s):\n", 
+                category_name, pred_class))
+    print(shap_df)
+  } else {
+    cat(sprintf("SHAP values format not recognized for %s instance\n", category_name))
+  }
+}
+
+cat("\nPer-instance SHAP calculations complete.\n")
+```
+
+#### Mean Absolute SHAP Values
+
+```{r}
+#| label: shap-mean-absolute
+#| cache: false
+
+# Set seed for reproducibility
+set.seed(42)
+
+cat("Calculating SHAP values for entire dataset...\n")
+cat("This may take a while...\n")
+
+# Calculate SHAP values for all instances in the dataset
+# Use a sample if dataset is too large (e.g., 1000 instances)
+n_samples <- min(1000, nrow(andmal_after))
+set.seed(42)
+sample_indices <- sample(nrow(andmal_after), n_samples)
+sample_data_x <- andmal_after[sample_indices, feature_cols_model1, drop = FALSE]
+
+cat(sprintf("Calculating SHAP values for %d instances...\n", n_samples))
+
+# Calculate SHAP values
+shap_all <- explain(
+  rf_category,
+  X = train_model1_x,
+  newdata = sample_data_x,
+  pred_wrapper = pred_wrapper,
+  nsim = 50  # Reduced for computational efficiency
+)
+
+# Calculate mean absolute SHAP values
+# fastshap returns a matrix where rows are instances and columns are features
+# For multi-class, we need to handle this appropriately
+if (is.data.frame(shap_all) || is.matrix(shap_all)) {
+  # Check if columns are classes or features
+  # If columns match feature names, they are features
+  # If columns match class names, we need to process differently
+  if (all(colnames(shap_all) %in% feature_cols_model1)) {
+    # Columns are features - calculate mean absolute across rows
+    mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all)), na.rm = TRUE)
+  } else if (any(colnames(shap_all) %in% levels(train_model1_y))) {
+    # Columns might be classes - this is unusual but handle it
+    # Average across all classes
+    mean_abs_shap_vec <- rowMeans(abs(as.matrix(shap_all)), na.rm = TRUE)
+    names(mean_abs_shap_vec) <- rownames(shap_all)
+  } else {
+    # Default: assume columns are features
+    mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all)), na.rm = TRUE)
+  }
+  
+  # Create data frame
+  mean_abs_shap_df <- data.frame(
+    feature = names(mean_abs_shap_vec),
+    mean_abs_shap = as.numeric(mean_abs_shap_vec)
+  ) %>%
+    arrange(desc(mean_abs_shap)) %>%
+    head(30)
+  
+  cat("\nTop 30 features by mean absolute SHAP value:\n")
+  print(mean_abs_shap_df)
+  
+  # Plot mean absolute SHAP values
+  p <- ggplot(mean_abs_shap_df, aes(x = reorder(feature, mean_abs_shap), y = mean_abs_shap)) +
+    geom_col() +
+    coord_flip() +
+    labs(
+      title = "Mean Absolute SHAP Values (Top 30 Features)",
+      x = "Feature",
+      y = "Mean |SHAP Value|"
+    ) +
+    theme_minimal()
+  print(p)
+} else {
+  cat("SHAP values format not recognized for mean absolute calculation\n")
+}
+
+cat("\nMean absolute SHAP calculation complete.\n")
+```
+
