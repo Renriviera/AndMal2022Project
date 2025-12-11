@@ -1,0 +1,563 @@
+---
+title: "EDAV Proposal"
+format: html
+---
+
+### Project Proposal:
+
+EDAV project on android malware/benign code
+
+I am interested in this area because I think cybersecurity does not get enough mainstream recognition- it is critical to the well-being of every other sector, it is also a data-rich(data quality is high too) computer centric field. Recently global events like the crowdstrike fiasco piqued my interest. I have always wanted to try doing some work in cybersecurity and this will be the first time! 
+### Questions:
+How imbalanced are the various categories and families of malware. What sort of permissions and API calls are most distinctive for each? What about memory/battery usage or network profiles?  Zero-days are never-seen before malware that exploit vulnerabilities previously unknown. There is also code that could not compile in the lab environment with reasons listed why. Should these be just considered as outliers or is there valuable knowledge to be gained from contrastive EDAV? 
+
+### Datasets I plan to use(I will use the first link listed but listed other relevant ones as well):
+https://www.unb.ca/cic/datasets/maldroid-2020.html
+Collected by UNB's Canadian Institute for Cybersecurity from various(cited in the link) reputable sources.
+— have access already, 17341 samples until 2018, 5 categories: Adware, Banking malware, SMS malware, Riskware, and Benign, APK files: 17,341 Android samples spanning between five distinct categories: Adware, Banking malware, SMS malware, Riskware, and Benign.
+Capturing-logs: The output analysis results of 13,077 samples in five categories: Adware, Banking malware, SMS malware, Riskware, and Benign.
+CSV files:
+470 extracted features for 11,598 APK files comprising frequencies of system calls, binders, and composite behaviors
+139 extracted features for 11,598 APK files comprising frequencies of system calls
+50,621 extracted features for 11,598 APK files comprising static information, such as intent actions, permissions, intent consts, permissions, files, method tags, sensitive APIs, services, packages, receivers, etc.
+
+### Other interesting sources:
+
+https://www.unb.ca/cic/datasets/andmal2020.html 
+— have access already,  big dataset 400k samples
+https://androzoo.uni.lu/?utm_source=chatgpt.com
+— don’t have access yes, very big dataset 20M+ samples
+https://data.mendeley.com/datasets/rvjptkrc34/1
+— have access already, small 1500 samples
+
+### Load Libraries and Preprocessed Data
+
+```{r}
+#| label: load-libraries
+#| cache: true
+
+library(ggplot2)
+library(tidyverse)
+library(viridis)
+library(dplyr)
+library(scales)
+library(tibble)
+library(tidyr)
+library(ggdensity)
+```
+
+```{r}
+#| label: load-processed-data
+#| cache: true
+
+# Load preprocessed data from preprocessing.qmd
+andmal_after <- readRDS("data/processed/andmal_after.rds")
+andmal_before <- readRDS("data/processed/andmal_before.rds")
+feature_definitions <- readRDS("data/processed/feature_definitions.rds")
+
+# Extract feature definitions for use in visualizations
+ui_features <- feature_definitions$ui_features
+dex_apis <- feature_definitions$dex_apis
+webview_cols <- feature_definitions$webview_cols
+fileio_apis <- feature_definitions$fileio_apis
+db_apis <- feature_definitions$db_apis
+db_read_apis <- feature_definitions$db_read_apis
+db_write_apis <- feature_definitions$db_write_apis
+filedb_apis <- feature_definitions$filedb_apis
+
+# Global color scheme
+andmal_theme <- theme_minimal(base_family = "sans") +
+  theme(
+    plot.title    = element_text(face = "bold", hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    axis.text.x   = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+
+category_col  <- scale_colour_viridis_d(option = "H", end = 0.9)
+category_fill <- scale_fill_viridis_d(option = "H", end = 0.9)
+
+cat(sprintf("Loaded andmal_after: %d rows, %d columns\n", nrow(andmal_after), ncol(andmal_after)))
+cat(sprintf("Loaded andmal_before: %d rows, %d columns\n", nrow(andmal_before), ncol(andmal_before)))
+```
+
+## Visualizations
+
+```{r}
+#| label: helper-function
+#| echo: false
+
+# Helper function to combine dataframes when needed for plots
+get_combined_data <- function() {
+  bind_rows(
+    andmal_before,
+    andmal_after
+  ) %>%
+  mutate(reboot_state = factor(reboot_state, levels = c("Before reboot", "After reboot")))
+}
+```
+
+### Memory Analysis
+
+```{r}
+#| label: plot-memory
+#| fig-height: 6
+#| fig-width: 10
+
+# Ensure required libraries are loaded (defensive in case cached session missed load step)
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(viridis)
+library(tidyr)
+library(tibble)
+
+
+
+# 1) Category-level means for all File/DB APIs ----
+filedb_means <- get_combined_data() %>%
+  select(Category, all_of(filedb_apis)) %>%
+  group_by(Category) %>%
+  summarise(
+    across(everything(), ~ mean(.x, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+# Turn into matrix: rows = Categories, cols = APIs ----
+filedb_mat <- filedb_means %>%
+  column_to_rownames("Category") %>%
+  as.matrix()
+
+# Replace NaN/Inf (e.g., mean of all-NA column) with 0 ----
+filedb_mat[!is.finite(filedb_mat)] <- 0
+
+# 2) Drop APIs with zero variance (no information) ----
+col_sds <- apply(filedb_mat, 2, sd, na.rm = TRUE)
+
+keep_cols <- names(col_sds)[col_sds > 0 & !is.na(col_sds)]
+filedb_mat2 <- filedb_mat[, keep_cols, drop = FALSE]
+
+# 3) Z-score across categories per API ----
+filedb_mat_scaled <- scale(filedb_mat2)  # center & scale each column
+
+# 4) Hierarchical clustering on rows (Categories) and columns (APIs) ----
+row_clust <- hclust(dist(filedb_mat_scaled))
+col_clust <- hclust(dist(t(filedb_mat_scaled)))
+
+row_order <- rownames(filedb_mat_scaled)[row_clust$order]
+col_order <- colnames(filedb_mat_scaled)[col_clust$order]
+
+# 5) Long format for ggplot, using clustered ordering ----
+filedb_long <- as.data.frame(filedb_mat_scaled) %>%
+  rownames_to_column("Category") %>%
+  pivot_longer(
+    cols      = -Category,
+    names_to  = "api_call",
+    values_to = "z_mean_calls"
+  ) %>%
+  mutate(
+    Category = factor(Category, levels = row_order),
+    api_call = factor(api_call, levels = col_order)
+  )
+
+# 6) Heatmap ----
+p_filedb_heatmap <- ggplot(
+  filedb_long,
+  aes(x = Category, y = api_call, fill = z_mean_calls)
+) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(
+    option = "B",
+    name   = "Z-scored\nmean calls"
+  ) +
+  labs(
+    title    = "File I/O and database activity by malware category",
+    subtitle = "Z-scored mean call counts per API; APIs with no variance removed, rows/cols clustered",
+    x = "Malware category",
+    y = "File / DB API"
+  ) +
+  andmal_theme +
+  theme(
+    panel.grid = element_blank()
+  )
+
+p_filedb_heatmap
+
+# Heatmap All categories: reads vs writes ---- 
+# Filter to categories with sufficient non-zero data points AND variance for density estimation
+db_data <- get_combined_data() %>%
+  group_by(Category) %>%
+  summarise(
+    non_zero_count = sum(log_DB_reads > 0 | log_DB_writes > 0),
+    reads_var = var(log_DB_reads, na.rm = TRUE),
+    writes_var = var(log_DB_writes, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(
+    non_zero_count >= 50,  # Require at least 50 non-zero points
+    reads_var > 0.01,      # Require minimum variance in reads
+    writes_var > 0.01      # Require minimum variance in writes
+  ) %>%
+  left_join(get_combined_data(), by = "Category")
+
+# Create separate dataset for density estimation (non-zero points only)
+# This prevents bandwidth estimation failures when there are too many zeros
+db_data_density <- db_data %>%
+  filter(log_DB_reads > 0 | log_DB_writes > 0)
+
+p_db_read_write <- ggplot(
+  db_data,
+  aes(x = log_DB_reads, y = log_DB_writes)
+) +
+  # Use non-zero data for density estimation to avoid bandwidth issues
+  ggdensity::geom_hdr(
+    data = db_data_density,
+    aes(fill = after_stat(probs)),
+    probs = c(.99, .95, .80, .50),
+    n = 300,
+    alpha = 0.6  # Lower alpha for better visibility
+  ) +
+  facet_wrap(~ Category, scales = "free") +  # Free scales for better visibility of each category
+  scale_fill_viridis_d(
+    option = "inferno",
+    name = "Density Level",
+    labels = c("99%", "95%", "80%", "50%"),
+    guide = guide_legend()
+  ) +
+  labs(
+    title    = "Database read vs write activity by category",
+    subtitle = "log10(total DB reads + 1) vs log10(total DB writes + 1) per sample, facetted by category (density estimated from non-zero points only; categories with <50 non-zero points or low variance excluded)",
+    x = "log10(total DB read calls + 1)",
+    y = "log10(total DB write calls + 1)"
+  ) +
+  andmal_theme
+
+p_db_read_write
+
+# Memory Activities vs WebViews by category ----
+# Filter to categories with sufficient data points where BOTH dimensions are non-zero
+# This is required for proper bandwidth estimation in density plots
+memory_data_summary <- get_combined_data() %>%
+  group_by(Category) %>%
+  summarise(
+    both_nonzero_count = sum(Memory_Activities > 0 & Memory_WebViews > 0),
+    .groups = "drop"
+  ) %>%
+  filter(both_nonzero_count >= 50)  # Require at least 50 points with both > 0
+
+# Calculate variance and unique values on the both > 0 subset for each category
+# Need sufficient unique values for kernel density estimation to work
+memory_data_variance <- get_combined_data() %>%
+  filter(Memory_Activities > 0 & Memory_WebViews > 0) %>%
+  group_by(Category) %>%
+  summarise(
+    activities_var = var(Memory_Activities, na.rm = TRUE),
+    webviews_var = var(Memory_WebViews, na.rm = TRUE),
+    activities_unique = length(unique(Memory_Activities)),
+    webviews_unique = length(unique(Memory_WebViews)),
+    .groups = "drop"
+  ) %>%
+  filter(
+    activities_var > 0.01,      # Require minimum variance in activities
+    webviews_var > 0.01,         # Require minimum variance in webviews
+    activities_unique >= 5,       # Require minimum unique values for density estimation
+    webviews_unique >= 5         # Require minimum unique values for density estimation
+  )
+
+# Get categories that pass both filters
+valid_categories <- intersect(memory_data_summary$Category, memory_data_variance$Category)
+
+# Filter full data to valid categories
+memory_data <- get_combined_data() %>%
+  filter(Category %in% valid_categories)
+
+# Create separate dataset for density estimation (both dimensions > 0 only)
+# This prevents bandwidth estimation failures when one dimension has many zeros
+memory_data_density <- memory_data %>%
+  filter(Memory_Activities > 0 & Memory_WebViews > 0)
+
+p_memory_activities_webviews <- ggplot(
+  memory_data,
+  aes(x = Memory_Activities, y = Memory_WebViews)
+) +
+  # Use non-zero data for density estimation to avoid bandwidth issues
+  ggdensity::geom_hdr(
+    data = memory_data_density,
+    aes(fill = after_stat(probs)),
+    probs = c(.99, .95, .80, .50),
+    n = 300,
+    alpha = 0.6  # Lower alpha for better visibility
+  ) +
+  facet_wrap(~ Category, scales = "free") +  # Free scales for better visibility of each category
+  scale_fill_viridis_d(
+    option = "inferno",
+    name = "Density Level",
+    labels = c("99%", "95%", "80%", "50%"),
+    guide = guide_legend()
+  ) +
+  labs(
+    title    = "Memory Activities vs WebViews by category",
+    subtitle = "Memory_Activities vs Memory_WebViews per sample, facetted by category (density estimated from points where both dimensions > 0; categories with <50 such points or low variance excluded)",
+    x = "Memory_Activities",
+    y = "Memory_WebViews"
+  ) +
+  andmal_theme
+
+p_memory_activities_webviews
+
+## 2. Keep only those Dex columns that actually exist in your data ----
+# (Optional) See which ones were missing:
+setdiff(dex_apis, names(andmal_before))
+# You can inspect this in the console if you're curious.
+
+## 3. Summarise per Category: proportion of samples with any Dex loading ----
+# (Moved to index.qmd)
+
+
+
+#IPC/Binder plots
+```
+
+### IPC/Binder plots
+
+We'll group APIs into 4 behaviors:
+
+Broadcasts - sendBroadcast / sendStickyBroadcast
+
+Services - startService / stopService
+
+Receivers - any *_registerReceiver / ActivityThread_handleReceiver
+
+Activities - any *_startActivity
+
+Then compute, for each Category, the proportion of samples that use each behavior at least once.
+
+```{r}
+#| label: ipc-behaviors
+
+# Build per-sample flags for each IPC behavior group ----
+ipc_group_summary <- get_combined_data() %>%
+  select(Category, has_broadcast, has_service, has_receiver, has_activity) %>%
+  pivot_longer(
+    cols      = c(has_broadcast, has_service, has_receiver, has_activity),
+    names_to  = "ipc_group",
+    values_to = "present"
+  ) %>%
+  mutate(
+    ipc_group = recode(
+      ipc_group,
+      has_broadcast = "Broadcasts",
+      has_service   = "Services",
+      has_receiver  = "Receivers",
+      has_activity  = "Activities"
+    )
+  ) %>%
+  group_by(Category, ipc_group) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Bar chart: proportion by Category & IPC group ----
+p_ipc_groups <- ggplot(
+  ipc_group_summary,
+  aes(x = Category, y = prop_present, fill = ipc_group)
+) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_viridis_d(
+    option = "D",
+    end    = 0.9,
+    name   = "IPC/Binder behavior"
+  ) +
+  labs(
+    title    = "IPC, Binder & broadcast behavior by malware category",
+    subtitle = "Proportion of samples that use each IPC group at least once",
+    x = "Malware category",
+    y = "% of samples"
+  ) +
+  andmal_theme +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p_ipc_groups
+
+# Privacy
+p_pii_index <- ggplot(
+  get_combined_data(),
+  aes(x = Category, y = log_PII_access, fill = Category)
+) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  category_fill +
+  labs(
+    title    = "PII access intensity by malware category",
+    subtitle = "log10(PII_access_count + 1), where PII = IDs + accounts + location + mic calls",
+    x = "Malware category",
+    y = "log10(PII_access_count + 1)"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_pii_index
+
+# Long + summary for PII type proportions
+pii_long <- get_combined_data() %>%
+  select(Category, has_ids, has_accounts, has_location, has_mic) %>%
+  pivot_longer(
+    cols      = c(has_ids, has_accounts, has_location, has_mic),
+    names_to  = "pii_type",
+    values_to = "present"
+  ) %>%
+  mutate(
+    pii_type = recode(
+      pii_type,
+      has_ids      = "Identifiers (device + WiFi)",
+      has_accounts = "Accounts & content",
+      has_location = "Location",
+      has_mic      = "Microphone"
+    )
+  )
+
+pii_summary <- pii_long %>%
+  group_by(Category, pii_type) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Stacked bar per Category: what PII is accessed?
+p_pii_type <- ggplot(
+  pii_summary,
+  aes(x = Category, y = prop_present, fill = pii_type)
+) +
+  geom_col(position = "stack") +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_viridis_d(
+    option = "D",
+    end    = 0.9,
+    name   = "PII type"
+  ) +
+  labs(
+    title    = "Types of PII accessed by malware category",
+    subtitle = "Each bar shows the proportion of samples accessing different PII types (may overlap)",
+    x = "Malware category",
+    y = "% of samples"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_pii_type
+
+# Long format for location/mic + reboot_state
+loc_mic_long <- get_combined_data() %>%
+  mutate(
+    has_location = location_calls > 0,
+    has_mic      = mic_calls      > 0
+  ) %>%
+  select(Category, reboot_state, has_location, has_mic) %>%
+  pivot_longer(
+    cols      = c(has_location, has_mic),
+    names_to  = "sensor_type",
+    values_to = "present"
+  ) %>%
+  mutate(
+    sensor_type = recode(
+      sensor_type,
+      has_location = "Location",
+      has_mic      = "Microphone"
+    )
+  )
+
+loc_mic_summary <- loc_mic_long %>%
+  group_by(Category, reboot_state, sensor_type) %>%
+  summarise(
+    prop_present = mean(present, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Bar chart: before vs after reboot for location/mic
+p_loc_mic_reboot <- ggplot(
+  loc_mic_summary,
+  aes(x = Category, y = prop_present, fill = reboot_state)
+) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ sensor_type) +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_manual(
+    values = c("Before reboot" = "#440154FF", "After reboot" = "#21908CFF"),
+    name   = "Reboot state"
+  ) +
+  labs(
+    title    = "Location and microphone access: before vs after reboot",
+    subtitle = "Proportion of samples touching location/mic APIs, by category & reboot state",
+    x = "Malware category",
+    y = "% of samples"
+  ) +
+  andmal_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_loc_mic_reboot
+
+```
+
+## Dynamic Code Loading Analysis
+
+Dynamic code loading through DexClassLoader APIs varies significantly across malware categories, with some categories showing higher adoption rates than others. This analysis examines the prevalence of dynamic code loading techniques used by different malware types.
+
+```{r}
+#| label: dynamic-dex-chart
+#| cache: true
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+# Summarise per Category: proportion of samples with any Dex loading
+dex_summary <- get_combined_data() %>%
+  group_by(Category) %>%
+  summarise(
+    prop_dex_any = mean(dex_any, na.rm = TRUE),
+    n_samples    = n(),
+    .groups      = "drop"
+  )
+
+# Bar chart: % of apps using Dex loading, by Category
+p_dex_bar <- ggplot(
+  dex_summary,
+  aes(x = Category, y = prop_dex_any, fill = Category)
+) +
+  geom_col() +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_fill_manual(values = rep("red", length(unique(dex_summary$Category)))) +
+  labs(
+    title = "Dynamic Dex loading by malware category",
+    subtitle = "Percentage of samples that use any DexClassLoader / DexFile dynamic loading API",
+    x = "Malware category",
+    y = "% of samples with dynamic Dex loading"
+  ) +
+  andmal_theme +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+
+p_dex_bar
+```
+
+```

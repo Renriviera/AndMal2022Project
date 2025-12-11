@@ -19,6 +19,7 @@ library(lime)
 library(fastshap)
 library(ggplot2)
 library(stringr)
+library(kableExtra)
 
 # Configuration
 num_threads <- 8L
@@ -156,108 +157,59 @@ pred_categories <- pred_model1$predictions
 pred_categories_class <- colnames(pred_categories)[apply(pred_categories, 1, which.max)]
 pred_categories_class <- factor(pred_categories_class, levels = levels(test_model1_y))
 
-# Confusion matrix
-if (caret_available) {
-  cm_model1 <- caret::confusionMatrix(pred_categories_class, test_model1_y)
-  
-  # Calculate per-class metrics
-  metrics_model1 <- cm_model1$overall
-  per_class_model1 <- cm_model1$byClass
-  
-  cat("\nOverall Accuracy:", metrics_model1["Accuracy"], "\n")
-} else {
-  # Base R confusion matrix and metrics
-  cm_table1 <- table(Predicted = pred_categories_class, Actual = test_model1_y)
-  accuracy1 <- sum(diag(cm_table1)) / sum(cm_table1)
-  cat("\nOverall Accuracy:", accuracy1, "\n")
-  
-  # Store for display
-  metrics_model1 <- list(Accuracy = accuracy1)
-  per_class_model1 <- NULL
-  cm_model1 <- list(table = cm_table1, overall = metrics_model1)
-}
+# Confusion matrix (always use caret)
+cm_model1 <- caret::confusionMatrix(pred_categories_class, test_model1_y)
+
+# Calculate per-class metrics
+metrics_model1 <- cm_model1$overall
+per_class_model1 <- cm_model1$byClass
+
+cat("\nOverall Accuracy:", metrics_model1["Accuracy"], "\n")
 ```
 
-### Confusion Matrix
+### Model Performance Metrics
 
 ```{r}
-#| label: display-confusion-matrix
+#| label: category-metrics-table
 #| echo: false
 
-if (caret_available) {
-  print(cm_model1)
+# Extract metrics from confusion matrix (caret is required)
+# Overall accuracy
+overall_acc <- as.numeric(cm_model1$overall["Accuracy"])
+
+# Per-class metrics (precision, recall, F1)
+if (!is.null(per_class_model1)) {
+  # Extract per-class metrics
+  precision <- per_class_model1[, "Precision"]
+  recall <- per_class_model1[, "Recall"]
+  f1 <- per_class_model1[, "F1"]
+  
+  # Create metrics table
+  metrics_table <- data.frame(
+    Category = names(precision),
+    Accuracy = rep(overall_acc, length(precision)),
+    Precision = as.numeric(precision),
+    Recall = as.numeric(recall),
+    F1 = as.numeric(f1)
+  )
 } else {
-  print(cm_model1$table)
+  stop("Per-class metrics not available. Please ensure caret package is properly loaded.")
 }
-```
 
-### Confusion Matrix Visualization
-
-```{r}
-#| label: confusion-matrix-plot
-#| echo: false
-
-# Create confusion matrix data frame for visualization
-if (caret_available && !is.null(cm_model1$table)) {
-  cm_table <- as.data.frame(cm_model1$table)
-  names(cm_table) <- c("Predicted", "Actual", "Freq")
-  
-  # Calculate percentages
-  cm_table <- cm_table %>%
-    group_by(Actual) %>%
-    mutate(Percent = round(100 * Freq / sum(Freq), 1)) %>%
-    ungroup()
-  
-  # Create heatmap
-  p_cm <- ggplot(cm_table, aes(x = Actual, y = Predicted, fill = Freq)) +
-    geom_tile(color = "white", linewidth = 0.5) +
-    geom_text(aes(label = paste0(Freq, "\n(", Percent, "%)")), 
-              color = "white", size = 3.5, fontface = "bold") +
-    scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
-    labs(
-      title = "Category Prediction Confusion Matrix",
-      subtitle = "Predicted vs Actual malware categories",
-      x = "Actual Category",
-      y = "Predicted Category"
-    ) +
-    theme_minimal() +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      plot.title = element_text(face = "bold", size = 14),
-      plot.subtitle = element_text(size = 11)
-    )
-  
-  print(p_cm)
-} else {
-  # Fallback for base R confusion matrix
-  cm_table <- as.data.frame(cm_model1$table)
-  names(cm_table) <- c("Predicted", "Actual", "Freq")
-  
-  cm_table <- cm_table %>%
-    group_by(Actual) %>%
-    mutate(Percent = round(100 * Freq / sum(Freq), 1)) %>%
-    ungroup()
-  
-  p_cm <- ggplot(cm_table, aes(x = Actual, y = Predicted, fill = Freq)) +
-    geom_tile(color = "white", linewidth = 0.5) +
-    geom_text(aes(label = paste0(Freq, "\n(", Percent, "%)")), 
-              color = "white", size = 3.5, fontface = "bold") +
-    scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
-    labs(
-      title = "Category Prediction Confusion Matrix",
-      subtitle = "Predicted vs Actual malware categories",
-      x = "Actual Category",
-      y = "Predicted Category"
-    ) +
-    theme_minimal() +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      plot.title = element_text(face = "bold", size = 14),
-      plot.subtitle = element_text(size = 11)
-    )
-  
-  print(p_cm)
-}
+# Format table with kableExtra
+metrics_table %>%
+  kbl(
+    caption = "Category Prediction Model Performance Metrics",
+    col.names = c("Category", "Overall Accuracy", "Precision", "Recall", "F1 Score"),
+    digits = 4,
+    align = c("l", "c", "c", "c", "c")
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "#4472C4", color = "white")
 ```
 
 ### Performance Metrics
@@ -371,6 +323,8 @@ LIME (Local Interpretable Model-agnostic Explanations) generates local approxima
 ```{r}
 #| label: lime-explanations
 #| cache: false
+#| fig.width: 12
+#| fig.height: 8
 
 # Set seed for reproducibility
 set.seed(42)
@@ -392,11 +346,12 @@ explainer <- lime(
 
 # Generate explanations for all selected instances
 cat("Generating LIME explanations for selected instances...\n")
-lime_explanations <- explain(
+lime_explanations <- lime::explain(
   selected_instances_x,
   explainer = explainer,
   n_features = 10,
-  n_permutations = 5000
+  n_permutations = 5000,
+  n_labels = 1
 )
 
 # Plot LIME explanations
@@ -417,6 +372,8 @@ SHAP (SHapley Additive exPlanations) values provide insight into feature contrib
 ```{r}
 #| label: shap-per-instance
 #| cache: false
+#| fig.width: 12
+#| fig.height: 8
 
 # Set seed for reproducibility
 set.seed(42)
@@ -436,11 +393,14 @@ for (i in 1:nrow(selected_instances_x)) {
   category_name <- selected_instances_df$Category[i]
   cat(sprintf("Calculating SHAP values for %s instance...\n", category_name))
   
+  # Ensure newdata is a data.frame to match training feature class
+  newdata_df <- as.data.frame(selected_instances_x[i, , drop = FALSE])
+  
   # Calculate SHAP values for this instance
   shap_vals <- explain(
     rf_category,
     X = train_model1_x,
-    newdata = selected_instances_x[i, , drop = FALSE],
+    newdata = newdata_df,
     pred_wrapper = pred_wrapper,
     nsim = 100
   )
@@ -449,7 +409,7 @@ for (i in 1:nrow(selected_instances_x)) {
   
   # Plot SHAP values for this instance
   # Get the predicted class probabilities
-  pred_probs <- predict(rf_category, selected_instances_x[i, , drop = FALSE])$predictions
+  pred_probs <- predict(rf_category, newdata_df)$predictions
   pred_class <- colnames(pred_probs)[which.max(pred_probs)]
   
   # Handle SHAP values - fastshap returns a matrix/data.frame
@@ -489,90 +449,65 @@ for (i in 1:nrow(selected_instances_x)) {
     cat(sprintf("\nTop 20 SHAP values for %s instance (predicted class: %s):\n", 
                 category_name, pred_class))
     print(shap_df)
+    
+    # Determine the order of magnitude (exponent) for scientific notation
+    max_abs_value <- max(abs(shap_df$shap_value))
+    if (max_abs_value > 0) {
+      exponent <- floor(log10(max_abs_value))
+      # Round to nearest multiple of 3 for cleaner display
+      exponent <- round(exponent / 3) * 3
+    } else {
+      exponent <- 0
+    }
+    
+    # Create custom label function that shows only significant digits
+    # and scales by the exponent
+    scale_factor <- 10^(-exponent)
+    label_func <- function(x) {
+      scaled <- x * scale_factor
+      # Format with appropriate decimal places
+      if (abs(exponent) >= 3) {
+        sprintf("%.3f", scaled)
+      } else {
+        sprintf("%.4f", scaled)
+      }
+    }
+    
+    # Create visualization
+    y_axis_label <- if (abs(exponent) >= 3) {
+      sprintf("SHAP Value (×10^%d)", exponent)
+    } else {
+      "SHAP Value"
+    }
+    
+    p_shap <- ggplot(shap_df, aes(x = reorder(feature, shap_value), y = shap_value)) +
+      geom_col(aes(fill = shap_value > 0)) +
+      scale_fill_manual(
+        values = c("TRUE" = "#2E8B57", "FALSE" = "#DC143C"),
+        labels = c("TRUE" = "Positive", "FALSE" = "Negative"),
+        name = "SHAP Value"
+      ) +
+      scale_y_continuous(labels = label_func) +
+      coord_flip() +
+      labs(
+        title = sprintf("SHAP Values - %s Instance", category_name),
+        subtitle = sprintf("Predicted class: %s", pred_class),
+        x = "Feature",
+        y = y_axis_label
+      ) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        axis.text.y = element_text(size = 8)
+      )
+    
+    print(p_shap)
   } else {
     cat(sprintf("SHAP values format not recognized for %s instance\n", category_name))
   }
 }
 
 cat("\nPer-instance SHAP calculations complete.\n")
-```
-
-#### Mean Absolute SHAP Values
-
-```{r}
-#| label: shap-mean-absolute
-#| cache: false
-
-# Set seed for reproducibility
-set.seed(42)
-
-cat("Calculating SHAP values for entire dataset...\n")
-cat("This may take a while...\n")
-
-# Calculate SHAP values for all instances in the dataset
-# Use a sample if dataset is too large (e.g., 1000 instances)
-n_samples <- min(1000, nrow(andmal_after))
-set.seed(42)
-sample_indices <- sample(nrow(andmal_after), n_samples)
-sample_data_x <- andmal_after[sample_indices, feature_cols_model1, drop = FALSE]
-
-cat(sprintf("Calculating SHAP values for %d instances...\n", n_samples))
-
-# Calculate SHAP values
-shap_all <- explain(
-  rf_category,
-  X = train_model1_x,
-  newdata = sample_data_x,
-  pred_wrapper = pred_wrapper,
-  nsim = 50  # Reduced for computational efficiency
-)
-
-# Calculate mean absolute SHAP values
-# fastshap returns a matrix where rows are instances and columns are features
-# For multi-class, we need to handle this appropriately
-if (is.data.frame(shap_all) || is.matrix(shap_all)) {
-  # Check if columns are classes or features
-  # If columns match feature names, they are features
-  # If columns match class names, we need to process differently
-  if (all(colnames(shap_all) %in% feature_cols_model1)) {
-    # Columns are features - calculate mean absolute across rows
-    mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all)), na.rm = TRUE)
-  } else if (any(colnames(shap_all) %in% levels(train_model1_y))) {
-    # Columns might be classes - this is unusual but handle it
-    # Average across all classes
-    mean_abs_shap_vec <- rowMeans(abs(as.matrix(shap_all)), na.rm = TRUE)
-    names(mean_abs_shap_vec) <- rownames(shap_all)
-  } else {
-    # Default: assume columns are features
-    mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all)), na.rm = TRUE)
-  }
-  
-  # Create data frame
-  mean_abs_shap_df <- data.frame(
-    feature = names(mean_abs_shap_vec),
-    mean_abs_shap = as.numeric(mean_abs_shap_vec)
-  ) %>%
-    arrange(desc(mean_abs_shap)) %>%
-    head(30)
-  
-  cat("\nTop 30 features by mean absolute SHAP value:\n")
-  print(mean_abs_shap_df)
-  
-  # Plot mean absolute SHAP values
-  p <- ggplot(mean_abs_shap_df, aes(x = reorder(feature, mean_abs_shap), y = mean_abs_shap)) +
-    geom_col() +
-    coord_flip() +
-    labs(
-      title = "Mean Absolute SHAP Values (Top 30 Features)",
-      x = "Feature",
-      y = "Mean |SHAP Value|"
-    ) +
-    theme_minimal()
-  print(p)
-} else {
-  cat("SHAP values format not recognized for mean absolute calculation\n")
-}
-
-cat("\nMean absolute SHAP calculation complete.\n")
 ```
 

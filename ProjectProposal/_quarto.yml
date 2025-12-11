@@ -2,20 +2,23 @@ project:
   type: website
   output-dir: docs
 
+execute:
+  freeze: auto  # Only re-execute when code/data changes
+
 website:
   title: "Android Malware Classification"
   navbar:
     left:
       - href: index.qmd
         text: Home
-      - href: preprocessing.qmd
-        text: Preprocessing
       - href: category.qmd
         text: Category Prediction
       - href: family.qmd
         text: Family Prediction
-      - href: proposal.qmd
+      - href: edav.qmd
         text: Exploratory Analysis
+      - href: tsne.qmd
+        text: t-SNE Visualization
 
 format:
   html:

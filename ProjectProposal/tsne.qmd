@@ -1,0 +1,175 @@
+---
+title: "t-SNE Visualization"
+format: html
+---
+
+t-SNE (t-distributed Stochastic Neighbor Embedding) provides a powerful way to visualize high-dimensional malware data in 2D and 3D space. This visualization reveals how samples cluster by category and helps identify patterns in the feature space that may not be apparent in higher dimensions.
+
+> **Note**: t-SNE computations are disabled by default (`eval: false`) to speed up rendering. 
+> To regenerate t-SNE plots, set `eval: true` in the code chunks below. 
+> Computation takes 10-30 minutes for 2D and 15-45 minutes for 3D embeddings.
+> Cached results will be used if available.
+
+### 2D t-SNE Visualization
+
+```{r}
+#| label: tsne-visualization
+#| cache: true
+#| eval: false  # Set to true to regenerate t-SNE (takes 10-30 minutes)
+
+library(Rtsne)
+library(ggplot2)
+library(dplyr)
+library(viridis)
+library(stringr)
+
+# Load preprocessed data
+andmal_after <- readRDS("data/processed/andmal_after.rds")
+
+cat(sprintf("Loaded dataset: %d rows, %d columns\n", nrow(andmal_after), ncol(andmal_after)))
+
+# Extract feature columns using same logic as category model
+metadata_cols <- c("Category", "Family", "Category_file", "reboot_state", "path", "file", "Hash")
+all_cols <- names(andmal_after)
+metadata_cols_present <- intersect(metadata_cols, all_cols)
+
+# Feature columns (exclude metadata and rank/color columns)
+feature_cols <- setdiff(all_cols, metadata_cols_present)
+feature_cols <- feature_cols[!str_detect(feature_cols, "rank|color|fam_color|rank_in_cat")]
+
+cat(sprintf("Using %d features for t-SNE\n", length(feature_cols)))
+
+# Extract feature matrix and category labels
+feature_matrix <- andmal_after[, feature_cols, drop = FALSE]
+category_labels <- andmal_after$Category
+
+# Handle any missing values (replace with 0)
+feature_matrix[is.na(feature_matrix)] <- 0
+
+# Remove constant/zero variance columns (required for PCA scaling)
+feature_matrix <- as.matrix(feature_matrix)
+constant_cols <- apply(feature_matrix, 2, function(x) var(x, na.rm = TRUE) == 0)
+if (sum(constant_cols) > 0) {
+  cat(sprintf("Removing %d constant/zero variance columns\n", sum(constant_cols)))
+  feature_matrix <- feature_matrix[, !constant_cols, drop = FALSE]
+}
+
+cat("Computing 2D t-SNE embedding...\n")
+cat("This may take 10-30 minutes depending on dataset size and hardware.\n")
+
+# Compute t-SNE (2D)
+set.seed(42)
+tsne_result_2d <- Rtsne(
+  feature_matrix,
+  dims = 2,
+  perplexity = 30,
+  max_iter = 1000,
+  theta = 0.5,
+  pca = TRUE,
+  pca_scale = TRUE,
+  verbose = TRUE,
+  check_duplicates = FALSE
+)
+
+cat("t-SNE computation complete.\n")
+
+# Create data frame for plotting
+tsne_df_2d <- data.frame(
+  tsne_1 = tsne_result_2d$Y[, 1],
+  tsne_2 = tsne_result_2d$Y[, 2],
+  Category = category_labels
+)
+
+# Create 2D plot
+p_tsne_2d <- ggplot(tsne_df_2d, aes(x = tsne_1, y = tsne_2, color = Category)) +
+  geom_point(alpha = 0.6, size = 0.8) +
+  scale_color_viridis_d(option = "H", end = 0.9) +
+  labs(
+    title = "t-SNE Visualization of Malware Samples",
+    subtitle = "2D embedding colored by malware category",
+    x = "t-SNE Component 1",
+    y = "t-SNE Component 2"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    legend.position = "right"
+  )
+
+p_tsne_2d
+```
+
+### 3D Interactive t-SNE Visualization
+
+For datasets of this size (~25,000 samples), a 3D interactive plot is feasible. Modern browsers can handle this number of points reasonably well, though rendering may be slower on older machines. The interactive plot allows for rotation and zooming, providing additional insights into the data structure.
+
+**Feasibility Assessment:**
+- **Dataset size**: ~25,000 points is manageable for 3D interactive visualization
+- **Rendering performance**: Should be acceptable with modern browsers
+- **File size**: Interactive HTML may be 5-15 MB
+- **Recommendation**: Yes, 3D plot is feasible and recommended for exploratory analysis
+
+```{r}
+#| label: tsne-3d-visualization
+#| cache: true
+#| eval: false  # Set to true to regenerate 3D t-SNE (takes 15-45 minutes)
+
+library(plotly)
+
+# Compute t-SNE (3D)
+cat("Computing 3D t-SNE embedding...\n")
+cat("This may take 15-45 minutes depending on dataset size and hardware.\n")
+
+set.seed(42)
+tsne_result_3d <- Rtsne(
+  feature_matrix,
+  dims = 3,
+  perplexity = 30,
+  max_iter = 1000,
+  theta = 0.5,
+  pca = TRUE,
+  pca_scale = TRUE,
+  verbose = TRUE,
+  check_duplicates = FALSE
+)
+
+cat("3D t-SNE computation complete.\n")
+
+# Create data frame for 3D plotting
+tsne_df_3d <- data.frame(
+  tsne_1 = tsne_result_3d$Y[, 1],
+  tsne_2 = tsne_result_3d$Y[, 2],
+  tsne_3 = tsne_result_3d$Y[, 3],
+  Category = category_labels
+)
+
+# Create interactive 3D plot
+p_tsne_3d <- plotly::plot_ly(
+  tsne_df_3d,
+  x = ~tsne_1,
+  y = ~tsne_2,
+  z = ~tsne_3,
+  color = ~Category,
+  colors = viridis::viridis_pal(option = "H", end = 0.9)(length(unique(tsne_df_3d$Category))),
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(
+    size = 3,
+    opacity = 0.6
+  ),
+  text = ~paste("Category:", Category),
+  hoverinfo = "text"
+) %>%
+  plotly::layout(
+    title = "3D t-SNE Visualization of Malware Samples",
+    scene = list(
+      xaxis = list(title = "t-SNE Component 1"),
+      yaxis = list(title = "t-SNE Component 2"),
+      zaxis = list(title = "t-SNE Component 3")
+    )
+  )
+
+p_tsne_3d
+```
+

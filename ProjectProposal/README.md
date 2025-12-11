@@ -38,28 +38,36 @@ The project expects data files in `data/raw/AndMal2020-dynamic-BeforeAndAfterReb
 
 ### Rendering the Website
 
+#### Full Project Render
+
 From the `ProjectProposal/` directory:
 
 ```bash
 quarto render
 ```
 
-This will:
-1. Run `preprocessing.qmd` to load and process data
-2. Execute modeling documents (`category.qmd`, `family.qmd`)
-3. Generate visualizations in `proposal.qmd`
-4. Build the website in `docs/`
+Renders all files listed in `_quarto.yml` render section (excludes `preprocessing.qmd` which is data manipulation only).
 
-### Individual Document Rendering
+#### Individual File Rendering (Faster for Development)
 
-To render a single document:
+To render specific files only:
 
 ```bash
-quarto render preprocessing.qmd
+# Render specific files only
+quarto render index.qmd
 quarto render category.qmd
 quarto render family.qmd
 quarto render proposal.qmd
 ```
+
+#### Performance Tips
+
+- **t-SNE computations** are disabled by default in `index.qmd` (`eval: false`)
+- Set `eval: true` in t-SNE chunks only when you need to regenerate embeddings
+- Computation takes 10-30 minutes for 2D and 15-45 minutes for 3D embeddings
+- Cached results are reused automatically when available
+- `preprocessing.qmd` is excluded from rendering (data manipulation only)
+- Use `quarto render <file.qmd>` for faster individual file rendering during development
 
 ### Preprocessing
 

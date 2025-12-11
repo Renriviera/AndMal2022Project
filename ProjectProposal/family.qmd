@@ -42,8 +42,8 @@ cat(sprintf("Loaded dataset: %d rows, %d columns\n", nrow(andmal_after), ncol(an
 #| label: identify-features
 #| cache: true
 
-# Metadata columns to exclude from features
-metadata_cols <- c("Category", "Family", "Category_file", "reboot_state", "path", "file", "Hash")
+# Metadata columns to exclude from features (keep only Category)
+metadata_cols <- c("Family", "Category_file", "reboot_state", "path", "file", "Hash")
 
 # Get all column names
 all_cols <- names(andmal_after)
@@ -51,13 +51,14 @@ all_cols <- names(andmal_after)
 # Identify metadata columns that actually exist
 metadata_cols_present <- intersect(metadata_cols, all_cols)
 
-# Feature columns for family prediction (exclude Family and other metadata)
+# Feature columns for family prediction (exclude metadata, keep Category)
 feature_cols_family <- setdiff(all_cols, metadata_cols_present)
 
 # Additional exclusion: any rank/color columns
 feature_cols_family <- feature_cols_family[!str_detect(feature_cols_family, "rank|color|fam_color|rank_in_cat")]
 
 cat(sprintf("Family prediction features: %d features\n", length(feature_cols_family)))
+cat(sprintf("Excluded metadata columns: %s\n", paste(metadata_cols_present, collapse = ", ")))
 ```
 
 ## Train Category-Specific Models
@@ -69,11 +70,9 @@ cat(sprintf("Family prediction features: %d features\n", length(feature_cols_fam
 # Categories to model
 target_categories <- c("Adware", "Riskware", "Trojan")
 
-# Storage for models and results
+# Storage for models and training data
 category_models <- list()
-category_metrics <- list()
-category_training_times <- list()
-category_cm <- list()
+category_train_data_list <- list()
 
 # Calculate mtry for family models
 mtry_family <- floor(sqrt(length(feature_cols_family)))
@@ -147,10 +146,10 @@ for (category in target_categories) {
   cat(sprintf("  Training set: %d samples\n", nrow(category_train)))
   cat(sprintf("  Test set: %d samples\n", nrow(category_test)))
   
-  # Prepare data for training
-  train_family_x <- category_train[, feature_cols_family, drop = FALSE]
+  # Prepare data for training (ensure data.frame, not tibble)
+  train_family_x <- as.data.frame(category_train[, feature_cols_family, drop = FALSE])
   train_family_y <- category_train$Family
-  test_family_x <- category_test[, feature_cols_family, drop = FALSE]
+  test_family_x <- as.data.frame(category_test[, feature_cols_family, drop = FALSE])
   test_family_y <- category_test$Family
   
   # Ensure Family factor levels match
@@ -176,206 +175,31 @@ for (category in target_categories) {
   
   end_time <- Sys.time()
   training_time <- difftime(end_time, start_time, units = "mins")
-  category_training_times[[category]] <- training_time
   cat(sprintf("  Training completed in %.2f minutes\n", as.numeric(training_time)))
   
-  # Evaluate model
-  cat(sprintf("  Evaluating %s family prediction model...\n", category))
-  pred_family <- predict(rf_family, test_family_x)
-  pred_families <- pred_family$predictions
-  
-  # Get predicted class
-  pred_families_class <- colnames(pred_families)[apply(pred_families, 1, which.max)]
-  pred_families_class <- factor(pred_families_class, levels = levels(test_family_y))
-  
-  # Confusion matrix and metrics
-  if (caret_available) {
-    cm_family <- caret::confusionMatrix(pred_families_class, test_family_y)
-    cat(sprintf("  %s Family Prediction - Accuracy: %.4f\n", 
-                category, cm_family$overall["Accuracy"]))
-    
-    metrics_family <- cm_family$overall
-    per_class_family <- cm_family$byClass
-    category_cm[[category]] <- cm_family
-  } else {
-    # Base R confusion matrix
-    cm_table_family <- table(Predicted = pred_families_class, Actual = test_family_y)
-    accuracy_family <- sum(diag(cm_table_family)) / sum(cm_table_family)
-    cat(sprintf("  %s Family Prediction - Accuracy: %.4f\n", category, accuracy_family))
-    
-    metrics_family <- list(Accuracy = accuracy_family)
-    per_class_family <- NULL
-    category_cm[[category]] <- list(table = cm_table_family, overall = metrics_family)
-  }
-  
-  # Store model and metrics
+  # Store model and training data (needed for LIME/SHAP)
   category_models[[category]] <- rf_family
-  category_metrics[[category]] <- list(
-    overall = metrics_family,
-    per_class = per_class_family
-  )
   
-  # Cleanup intermediate variables
-  rm(category_data, category_train, category_test, train_family_x, train_family_y, 
-     test_family_x, test_family_y, pred_family, pred_families, pred_families_class)
-  gc()
-}
-```
-
-## Model Results
-
-```{r}
-#| label: display-results
-#| echo: false
-
-for (category in names(category_models)) {
-  cat(sprintf("\n## %s Family Prediction\n\n", category))
-  cat(sprintf("Training time: %.2f minutes\n\n", as.numeric(category_training_times[[category]])))
-  
-  metrics_fam <- category_metrics[[category]]$overall
-  
-  cat("Overall Metrics:\n")
-  if (caret_available && !is.null(metrics_fam)) {
-    if (is.list(metrics_fam) && "Accuracy" %in% names(metrics_fam)) {
-      cat(sprintf("Accuracy: %.4f\n", metrics_fam["Accuracy"]))
-    } else if (is.numeric(metrics_fam)) {
-      cat(sprintf("Accuracy: %.4f\n", metrics_fam))
-    } else {
-      print(metrics_fam)
-    }
-  } else if (is.list(metrics_fam)) {
-    cat(sprintf("Accuracy: %.4f\n", metrics_fam$Accuracy))
+  # Save model
+  if (!dir.exists("data/models")) {
+    dir.create("data/models", recursive = TRUE)
   }
-  
-  cat("\nConfusion Matrix:\n")
-  if (caret_available && !is.null(category_cm[[category]]$table)) {
-    print(category_cm[[category]]$table)
-  } else {
-    print(category_cm[[category]]$table)
-  }
-  
-  cat("\n")
-}
-```
-
-## Confusion Matrix Visualizations
-
-```{r}
-#| label: family-confusion-matrices
-#| echo: false
-
-for (category in names(category_models)) {
-  cat(sprintf("\n### %s Family Model Confusion Matrix\n\n", category))
-  
-  if (!is.null(category_cm[[category]]$table)) {
-    # Create confusion matrix data frame for visualization
-    cm_table <- as.data.frame(category_cm[[category]]$table)
-    names(cm_table) <- c("Predicted", "Actual", "Freq")
-    
-    # Calculate percentages
-    cm_table <- cm_table %>%
-      group_by(Actual) %>%
-      mutate(Percent = round(100 * Freq / sum(Freq), 1)) %>%
-      ungroup()
-    
-    # Create heatmap
-    p_cm <- ggplot(cm_table, aes(x = Actual, y = Predicted, fill = Freq)) +
-      geom_tile(color = "white", linewidth = 0.5) +
-      geom_text(aes(label = paste0(Freq, "\n(", Percent, "%)")), 
-                color = "white", size = 3, fontface = "bold") +
-      scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Count") +
-      labs(
-        title = sprintf("%s Family Prediction Confusion Matrix", category),
-        subtitle = "Predicted vs Actual malware families",
-        x = "Actual Family",
-        y = "Predicted Family"
-      ) +
-      theme_minimal() +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(face = "bold", size = 14),
-        plot.subtitle = element_text(size = 11)
-      )
-    
-    print(p_cm)
-  }
-}
-```
-
-## Save Models
-
-```{r}
-#| label: save-models
-#| cache: false
-#| eval: true
-
-# Save category-specific family models
-for (category in names(category_models)) {
   model_name <- paste0("data/models/rf_family_", tolower(category), "_model.rds")
-  saveRDS(category_models[[category]], model_name)
-  cat(sprintf("Saved: %s\n", model_name))
+  saveRDS(rf_family, model_name)
+  cat(sprintf("  Saved: %s\n", model_name))
+  
+  # Store training data for this category (needed for LIME/SHAP explanations)
+  # Save as data.frame to avoid tibble issues
+  category_train_data_list[[category]] <- list(
+    train_x = train_family_x,
+    train_y = train_family_y
+  )
 }
+
+cat("\nAll family models trained successfully.\n")
 ```
 
-## Random Forest Model Summaries
-
-### Adware Family Model Summary
-
-The Adware family prediction model classifies malware families within the Adware category. The model achieves high accuracy in distinguishing between different family variants by leveraging behavioral patterns specific to adware samples. Key distinguishing features include network activity patterns, API call sequences, and resource utilization metrics that vary between adware families.
-
-```{r}
-#| label: adware-model-summary
-#| echo: false
-
-if ("Adware" %in% names(category_models)) {
-  model <- category_models[["Adware"]]
-  cat("Adware Family Model Configuration:\n")
-  cat(sprintf("  Number of trees: %d\n", model$num.trees))
-  cat(sprintf("  Number of features: %d\n", length(feature_cols_family)))
-  cat(sprintf("  mtry parameter: %d\n", model$mtry))
-  cat(sprintf("  Training accuracy: %.4f\n", 1 - model$prediction.error))
-}
-```
-
-### Riskware Family Model Summary
-
-The Riskware family prediction model classifies malware families within the Riskware category. The model utilizes feature interactions that capture the nuanced differences between riskware variants, which often exhibit subtle behavioral variations. Network communication patterns, system call sequences, and permission usage are among the most informative features for family-level classification.
-
-```{r}
-#| label: riskware-model-summary
-#| echo: false
-
-if ("Riskware" %in% names(category_models)) {
-  model <- category_models[["Riskware"]]
-  cat("Riskware Family Model Configuration:\n")
-  cat(sprintf("  Number of trees: %d\n", model$num.trees))
-  cat(sprintf("  Number of features: %d\n", length(feature_cols_family)))
-  cat(sprintf("  mtry parameter: %d\n", model$mtry))
-  cat(sprintf("  Training accuracy: %.4f\n", 1 - model$prediction.error))
-}
-```
-
-### Trojan Family Model Summary
-
-The Trojan family prediction model classifies malware families within the Trojan category. The model demonstrates strong performance in identifying family-specific characteristics that distinguish trojan variants. Behavioral features related to stealth mechanisms, payload delivery patterns, and persistence techniques are particularly important for accurate family classification.
-
-```{r}
-#| label: trojan-model-summary
-#| echo: false
-
-if ("Trojan" %in% names(category_models)) {
-  model <- category_models[["Trojan"]]
-  cat("Trojan Family Model Configuration:\n")
-  cat(sprintf("  Number of trees: %d\n", model$num.trees))
-  cat(sprintf("  Number of features: %d\n", length(feature_cols_family)))
-  cat(sprintf("  mtry parameter: %d\n", model$mtry))
-  cat(sprintf("  Training accuracy: %.4f\n", 1 - model$prediction.error))
-}
-```
-
-## Model Interpretability
-
-### Instance Selection
+## Load Selected Instances
 
 ```{r}
 #| label: load-selected-instances
@@ -390,114 +214,46 @@ if (file.exists("data/processed/selected_instances.rds")) {
   cat("Loaded selected instances from category.qmd\n")
   cat(sprintf("Selected instances: %s\n", paste(selected_instances_df$Category, collapse = ", ")))
 } else {
-  # If file doesn't exist, recreate using same method as category.qmd
-  cat("Selected instances file not found. Recreating...\n")
-  
-  # Need to recreate train/test split to get test_data
-  set.seed(42)
-  if (caret_available) {
-    train_index <- caret::createDataPartition(
-      andmal_after$Category,
-      p = train_test_split,
-      list = FALSE,
-      times = 1
-    )
-    test_data <- andmal_after[-train_index, ]
-  } else {
-    categories <- unique(andmal_after$Category)
-    train_indices <- c()
-    for (cat in categories) {
-      cat_indices <- which(andmal_after$Category == cat)
-      n_train <- round(length(cat_indices) * train_test_split)
-      train_cat_indices <- sample(cat_indices, n_train)
-      train_indices <- c(train_indices, train_cat_indices)
-    }
-    test_data <- andmal_after[-train_indices, ]
-  }
-  
-  # Select instances
-  target_categories <- c("Adware", "Riskware", "Trojan")
-  selected_instances <- list()
-  
-  for (category in target_categories) {
-    category_indices <- which(test_data$Category == category)
-    if (length(category_indices) > 0) {
-      selected_idx <- category_indices[1]
-      selected_instances[[category]] <- test_data[selected_idx, ]
-    }
-  }
-  
-  selected_instances_df <- bind_rows(selected_instances)
+  stop("Selected instances file not found. Please run category.qmd first to generate selected_instances.rds")
 }
 
-# Extract feature matrices for each category
+# Extract feature matrices for explanations (same pattern as category.qmd)
 selected_instances_x <- selected_instances_df[, feature_cols_family, drop = FALSE]
 
 cat("\nInstance selection complete.\n")
 ```
 
-### Adware Family Model Explanations
+## Model Interpretability
 
-SHAP values for the Adware instance reveal the feature contributions specific to family-level classification. Key distinguishing features include network activity patterns, API call frequencies, and resource utilization metrics that help differentiate between adware families. LIME explanations for the Adware family model show localized feature importance patterns that differ from category-level predictions, highlighting the nuanced differences required for family identification.
+### Adware Family Model Explanations
 
 ```{r}
 #| label: adware-lime-shap
 #| cache: false
+#| fig.width: 12
+#| fig.height: 8
 
 # Set seed for reproducibility
 set.seed(42)
 
 category <- "Adware"
 
-if (category %in% names(category_models) && category %in% selected_instances_df$Category) {
+if (category %in% names(category_models)) {
   cat(sprintf("\n=== %s Family Model Explanations ===\n", category))
   
-  # Get the corresponding instance
+  # Get the corresponding instance (same pattern as category.qmd)
   instance_idx <- which(selected_instances_df$Category == category)
-  instance_x <- selected_instances_x[instance_idx, , drop = FALSE]
-  
-  # Get training data for this category (needed for LIME and SHAP)
-  category_train_data <- andmal_after %>%
-    filter(Category == category)
-  
-  if (nrow(category_train_data) > 0) {
-    # Recreate train/test split for this category
-    set.seed(42)
-    if (caret_available) {
-      cat_train_idx <- caret::createDataPartition(
-        category_train_data$Family,
-        p = train_test_split,
-        list = FALSE,
-        times = 1
-      )
-      cat_train <- category_train_data[cat_train_idx, ]
-    } else {
-      families <- unique(category_train_data$Family)
-      train_indices <- c()
-      for (fam in families) {
-        fam_indices <- which(category_train_data$Family == fam)
-        if (length(fam_indices) > 1) {
-          n_train <- max(1, round(length(fam_indices) * train_test_split))
-          train_fam_indices <- sample(fam_indices, n_train)
-          train_indices <- c(train_indices, train_fam_indices)
-        } else {
-          train_indices <- c(train_indices, fam_indices)
-        }
-      }
-      cat_train <- category_train_data[train_indices, ]
-    }
-    
-    train_family_x <- cat_train[, feature_cols_family, drop = FALSE]
+  if (length(instance_idx) == 0) {
+    cat(sprintf("No instance found for category %s\n", category))
+  } else {
+    # Get training data for this category
+    train_family_x <- category_train_data_list[[category]]$train_x
     model <- category_models[[category]]
     
     #### LIME Explanation
     cat(sprintf("\n--- LIME Explanation for %s Instance ---\n", category))
     
-    predict_function_family <- function(model, newdata) {
-      pred <- predict(model, newdata)
-      return(pred$predictions)
-    }
-    
+    # Create LIME explainer
     explainer_family <- lime(
       train_family_x,
       model = model,
@@ -505,34 +261,51 @@ if (category %in% names(category_models) && category %in% selected_instances_df$
       n_bins = 5
     )
     
-    lime_explanation <- explain(
+    # Extract instance (same pattern as category.qmd)
+    instance_x <- as.data.frame(selected_instances_x[instance_idx, , drop = FALSE])
+    
+    lime_explanation <- lime::explain(
       instance_x,
       explainer = explainer_family,
       n_features = 10,
-      n_permutations = 5000
+      n_permutations = 5000,
+      n_labels = 1
     )
     
     cat("LIME Explanation:\n")
-    print(plot_features(lime_explanation))
+    # Ensure explanation has proper structure for plotting
+    if (nrow(lime_explanation) > 0) {
+      # If explanation doesn't have 'case' column, add it
+      if (!"case" %in% colnames(lime_explanation)) {
+        lime_explanation$case <- 1
+      }
+      print(plot_features(lime_explanation))
+    } else {
+      cat("Warning: LIME explanation is empty. Skipping plot.\n")
+    }
     
     #### Per-Instance SHAP Values
     cat(sprintf("\n--- Per-Instance SHAP Values for %s Instance ---\n", category))
     
+    # Create prediction function for fastshap
     pred_wrapper_family <- function(object, newdata) {
       pred <- predict(object, newdata)
       return(pred$predictions)
     }
     
+    # Ensure newdata is a data.frame (same pattern as category.qmd)
+    newdata_df <- as.data.frame(selected_instances_x[instance_idx, , drop = FALSE])
+    
     shap_instance <- explain(
       model,
       X = train_family_x,
-      newdata = instance_x,
+      newdata = newdata_df,
       pred_wrapper = pred_wrapper_family,
       nsim = 100
     )
     
-    # Get predicted class
-    pred_probs <- predict(model, instance_x)$predictions
+    # Get predicted class probabilities
+    pred_probs <- predict(model, newdata_df)$predictions
     pred_class <- colnames(pred_probs)[which.max(pred_probs)]
     
     # Handle SHAP values - fastshap returns a matrix/data.frame
@@ -570,141 +343,98 @@ if (category %in% names(category_models) && category %in% selected_instances_df$
       
       cat(sprintf("Top 20 SHAP values (predicted class: %s):\n", pred_class))
       print(shap_df)
+      
+      # Determine the order of magnitude (exponent) for scientific notation
+      max_abs_value <- max(abs(shap_df$shap_value))
+      if (max_abs_value > 0) {
+        exponent <- floor(log10(max_abs_value))
+        # Round to nearest multiple of 3 for cleaner display
+        exponent <- round(exponent / 3) * 3
+      } else {
+        exponent <- 0
+      }
+      
+      # Create custom label function that shows only significant digits
+      # and scales by the exponent
+      scale_factor <- 10^(-exponent)
+      label_func <- function(x) {
+        scaled <- x * scale_factor
+        # Format with appropriate decimal places
+        if (abs(exponent) >= 3) {
+          sprintf("%.3f", scaled)
+        } else {
+          sprintf("%.4f", scaled)
+        }
+      }
+      
+      # Create visualization
+      y_axis_label <- if (abs(exponent) >= 3) {
+        sprintf("SHAP Value (×10^%d)", exponent)
+      } else {
+        "SHAP Value"
+      }
+      
+      p_shap <- ggplot(shap_df, aes(x = reorder(feature, shap_value), y = shap_value)) +
+        geom_col(aes(fill = shap_value > 0)) +
+        scale_fill_manual(
+          values = c("TRUE" = "#2E8B57", "FALSE" = "#DC143C"),
+          labels = c("TRUE" = "Positive", "FALSE" = "Negative"),
+          name = "SHAP Value"
+        ) +
+        scale_y_continuous(labels = label_func) +
+        coord_flip() +
+        labs(
+          title = sprintf("SHAP Values - %s Instance (%s Family Model)", category, pred_class),
+          subtitle = sprintf("Top 20 features by absolute SHAP value"),
+          x = "Feature",
+          y = y_axis_label
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 12),
+          axis.text.y = element_text(size = 8)
+        )
+      
+      print(p_shap)
     } else {
       cat(sprintf("SHAP values format not recognized for %s instance\n", category))
     }
-    
-    #### Mean Absolute SHAP Values
-    cat(sprintf("\n--- Mean Absolute SHAP Values for %s Category ---\n", category))
-    
-    # Use all instances from this category
-    category_all_x <- category_train_data[, feature_cols_family, drop = FALSE]
-    
-    # Sample if too large
-    n_samples <- min(500, nrow(category_all_x))
-    set.seed(42)
-    sample_indices <- sample(nrow(category_all_x), n_samples)
-    sample_category_x <- category_all_x[sample_indices, , drop = FALSE]
-    
-    cat(sprintf("Calculating SHAP values for %d instances from %s category...\n", 
-                n_samples, category))
-    
-    shap_all_category <- explain(
-      model,
-      X = train_family_x,
-      newdata = sample_category_x,
-      pred_wrapper = pred_wrapper_family,
-      nsim = 50
-    )
-    
-    # Calculate mean absolute SHAP values
-    if (is.data.frame(shap_all_category) || is.matrix(shap_all_category)) {
-      # Check if columns are classes or features
-      if (all(colnames(shap_all_category) %in% feature_cols_family)) {
-        # Columns are features
-        mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-      } else if (any(colnames(shap_all_category) %in% levels(cat_train$Family))) {
-        # Columns might be classes
-        mean_abs_shap_vec <- rowMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-        names(mean_abs_shap_vec) <- rownames(shap_all_category)
-      } else {
-        # Default: assume columns are features
-        mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-      }
-      
-      # Create data frame
-      mean_abs_shap_df <- data.frame(
-        feature = names(mean_abs_shap_vec),
-        mean_abs_shap = as.numeric(mean_abs_shap_vec)
-      ) %>%
-        arrange(desc(mean_abs_shap)) %>%
-        head(30)
-      
-      cat("\nTop 30 features by mean absolute SHAP value:\n")
-      print(mean_abs_shap_df)
-      
-      # Plot
-      p <- ggplot(mean_abs_shap_df, aes(x = reorder(feature, mean_abs_shap), y = mean_abs_shap)) +
-        geom_col() +
-        coord_flip() +
-        labs(
-          title = sprintf("Mean Absolute SHAP Values - %s Family Model (Top 30)", category),
-          x = "Feature",
-          y = "Mean |SHAP Value|"
-        ) +
-        theme_minimal()
-      print(p)
-    } else {
-      cat("SHAP values format not recognized for mean absolute calculation\n")
-    }
   }
 } else {
-  cat(sprintf("Skipping %s: model or instance not available\n", category))
+  cat(sprintf("Model for %s not found.\n", category))
 }
 ```
 
 ### Riskware Family Model Explanations
 
-SHAP values for the Riskware instance reveal the feature contributions specific to family-level classification. Key distinguishing features include system call patterns, permission usage, and network communication behaviors that help differentiate between riskware families. LIME explanations for the Riskware family model show localized feature importance patterns that differ from category-level predictions, highlighting the nuanced differences required for family identification.
-
 ```{r}
 #| label: riskware-lime-shap
 #| cache: false
+#| fig.width: 12
+#| fig.height: 8
 
 # Set seed for reproducibility
 set.seed(42)
 
 category <- "Riskware"
 
-if (category %in% names(category_models) && category %in% selected_instances_df$Category) {
+if (category %in% names(category_models)) {
   cat(sprintf("\n=== %s Family Model Explanations ===\n", category))
   
-  # Get the corresponding instance
+  # Get the corresponding instance (same pattern as category.qmd)
   instance_idx <- which(selected_instances_df$Category == category)
-  instance_x <- selected_instances_x[instance_idx, , drop = FALSE]
-  
-  # Get training data for this category
-  category_train_data <- andmal_after %>%
-    filter(Category == category)
-  
-  if (nrow(category_train_data) > 0) {
-    # Recreate train/test split for this category
-    set.seed(42)
-    if (caret_available) {
-      cat_train_idx <- caret::createDataPartition(
-        category_train_data$Family,
-        p = train_test_split,
-        list = FALSE,
-        times = 1
-      )
-      cat_train <- category_train_data[cat_train_idx, ]
-    } else {
-      families <- unique(category_train_data$Family)
-      train_indices <- c()
-      for (fam in families) {
-        fam_indices <- which(category_train_data$Family == fam)
-        if (length(fam_indices) > 1) {
-          n_train <- max(1, round(length(fam_indices) * train_test_split))
-          train_fam_indices <- sample(fam_indices, n_train)
-          train_indices <- c(train_indices, train_fam_indices)
-        } else {
-          train_indices <- c(train_indices, fam_indices)
-        }
-      }
-      cat_train <- category_train_data[train_indices, ]
-    }
-    
-    train_family_x <- cat_train[, feature_cols_family, drop = FALSE]
+  if (length(instance_idx) == 0) {
+    cat(sprintf("No instance found for category %s\n", category))
+  } else {
+    # Get training data for this category
+    train_family_x <- category_train_data_list[[category]]$train_x
     model <- category_models[[category]]
     
     #### LIME Explanation
     cat(sprintf("\n--- LIME Explanation for %s Instance ---\n", category))
     
-    predict_function_family <- function(model, newdata) {
-      pred <- predict(model, newdata)
-      return(pred$predictions)
-    }
-    
+    # Create LIME explainer
     explainer_family <- lime(
       train_family_x,
       model = model,
@@ -712,34 +442,51 @@ if (category %in% names(category_models) && category %in% selected_instances_df$
       n_bins = 5
     )
     
-    lime_explanation <- explain(
+    # Extract instance (same pattern as category.qmd)
+    instance_x <- as.data.frame(selected_instances_x[instance_idx, , drop = FALSE])
+    
+    lime_explanation <- lime::explain(
       instance_x,
       explainer = explainer_family,
       n_features = 10,
-      n_permutations = 5000
+      n_permutations = 5000,
+      n_labels = 1
     )
     
     cat("LIME Explanation:\n")
-    print(plot_features(lime_explanation))
+    # Ensure explanation has proper structure for plotting
+    if (nrow(lime_explanation) > 0) {
+      # If explanation doesn't have 'case' column, add it
+      if (!"case" %in% colnames(lime_explanation)) {
+        lime_explanation$case <- 1
+      }
+      print(plot_features(lime_explanation))
+    } else {
+      cat("Warning: LIME explanation is empty. Skipping plot.\n")
+    }
     
     #### Per-Instance SHAP Values
     cat(sprintf("\n--- Per-Instance SHAP Values for %s Instance ---\n", category))
     
+    # Create prediction function for fastshap
     pred_wrapper_family <- function(object, newdata) {
       pred <- predict(object, newdata)
       return(pred$predictions)
     }
     
+    # Ensure newdata is a data.frame (same pattern as category.qmd)
+    newdata_df <- as.data.frame(selected_instances_x[instance_idx, , drop = FALSE])
+    
     shap_instance <- explain(
       model,
       X = train_family_x,
-      newdata = instance_x,
+      newdata = newdata_df,
       pred_wrapper = pred_wrapper_family,
       nsim = 100
     )
     
-    # Get predicted class
-    pred_probs <- predict(model, instance_x)$predictions
+    # Get predicted class probabilities
+    pred_probs <- predict(model, newdata_df)$predictions
     pred_class <- colnames(pred_probs)[which.max(pred_probs)]
     
     # Handle SHAP values - fastshap returns a matrix/data.frame
@@ -777,141 +524,98 @@ if (category %in% names(category_models) && category %in% selected_instances_df$
       
       cat(sprintf("Top 20 SHAP values (predicted class: %s):\n", pred_class))
       print(shap_df)
+      
+      # Determine the order of magnitude (exponent) for scientific notation
+      max_abs_value <- max(abs(shap_df$shap_value))
+      if (max_abs_value > 0) {
+        exponent <- floor(log10(max_abs_value))
+        # Round to nearest multiple of 3 for cleaner display
+        exponent <- round(exponent / 3) * 3
+      } else {
+        exponent <- 0
+      }
+      
+      # Create custom label function that shows only significant digits
+      # and scales by the exponent
+      scale_factor <- 10^(-exponent)
+      label_func <- function(x) {
+        scaled <- x * scale_factor
+        # Format with appropriate decimal places
+        if (abs(exponent) >= 3) {
+          sprintf("%.3f", scaled)
+        } else {
+          sprintf("%.4f", scaled)
+        }
+      }
+      
+      # Create visualization
+      y_axis_label <- if (abs(exponent) >= 3) {
+        sprintf("SHAP Value (×10^%d)", exponent)
+      } else {
+        "SHAP Value"
+      }
+      
+      p_shap <- ggplot(shap_df, aes(x = reorder(feature, shap_value), y = shap_value)) +
+        geom_col(aes(fill = shap_value > 0)) +
+        scale_fill_manual(
+          values = c("TRUE" = "#2E8B57", "FALSE" = "#DC143C"),
+          labels = c("TRUE" = "Positive", "FALSE" = "Negative"),
+          name = "SHAP Value"
+        ) +
+        scale_y_continuous(labels = label_func) +
+        coord_flip() +
+        labs(
+          title = sprintf("SHAP Values - %s Instance (%s Family Model)", category, pred_class),
+          subtitle = sprintf("Top 20 features by absolute SHAP value"),
+          x = "Feature",
+          y = y_axis_label
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 12),
+          axis.text.y = element_text(size = 8)
+        )
+      
+      print(p_shap)
     } else {
       cat(sprintf("SHAP values format not recognized for %s instance\n", category))
     }
-    
-    #### Mean Absolute SHAP Values
-    cat(sprintf("\n--- Mean Absolute SHAP Values for %s Category ---\n", category))
-    
-    # Use all instances from this category
-    category_all_x <- category_train_data[, feature_cols_family, drop = FALSE]
-    
-    # Sample if too large
-    n_samples <- min(500, nrow(category_all_x))
-    set.seed(42)
-    sample_indices <- sample(nrow(category_all_x), n_samples)
-    sample_category_x <- category_all_x[sample_indices, , drop = FALSE]
-    
-    cat(sprintf("Calculating SHAP values for %d instances from %s category...\n", 
-                n_samples, category))
-    
-    shap_all_category <- explain(
-      model,
-      X = train_family_x,
-      newdata = sample_category_x,
-      pred_wrapper = pred_wrapper_family,
-      nsim = 50
-    )
-    
-    # Calculate mean absolute SHAP values
-    if (is.data.frame(shap_all_category) || is.matrix(shap_all_category)) {
-      # Check if columns are classes or features
-      if (all(colnames(shap_all_category) %in% feature_cols_family)) {
-        # Columns are features
-        mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-      } else if (any(colnames(shap_all_category) %in% levels(cat_train$Family))) {
-        # Columns might be classes
-        mean_abs_shap_vec <- rowMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-        names(mean_abs_shap_vec) <- rownames(shap_all_category)
-      } else {
-        # Default: assume columns are features
-        mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-      }
-      
-      # Create data frame
-      mean_abs_shap_df <- data.frame(
-        feature = names(mean_abs_shap_vec),
-        mean_abs_shap = as.numeric(mean_abs_shap_vec)
-      ) %>%
-        arrange(desc(mean_abs_shap)) %>%
-        head(30)
-      
-      cat("\nTop 30 features by mean absolute SHAP value:\n")
-      print(mean_abs_shap_df)
-      
-      # Plot
-      p <- ggplot(mean_abs_shap_df, aes(x = reorder(feature, mean_abs_shap), y = mean_abs_shap)) +
-        geom_col() +
-        coord_flip() +
-        labs(
-          title = sprintf("Mean Absolute SHAP Values - %s Family Model (Top 30)", category),
-          x = "Feature",
-          y = "Mean |SHAP Value|"
-        ) +
-        theme_minimal()
-      print(p)
-    } else {
-      cat("SHAP values format not recognized for mean absolute calculation\n")
-    }
   }
 } else {
-  cat(sprintf("Skipping %s: model or instance not available\n", category))
+  cat(sprintf("Model for %s not found.\n", category))
 }
 ```
 
 ### Trojan Family Model Explanations
 
-SHAP values for the Trojan instance reveal the feature contributions specific to family-level classification. Key distinguishing features include stealth mechanisms, payload delivery patterns, and persistence techniques that help differentiate between trojan families. LIME explanations for the Trojan family model show localized feature importance patterns that differ from category-level predictions, highlighting the nuanced differences required for family identification.
-
 ```{r}
 #| label: trojan-lime-shap
 #| cache: false
+#| fig.width: 12
+#| fig.height: 8
 
 # Set seed for reproducibility
 set.seed(42)
 
 category <- "Trojan"
 
-if (category %in% names(category_models) && category %in% selected_instances_df$Category) {
+if (category %in% names(category_models)) {
   cat(sprintf("\n=== %s Family Model Explanations ===\n", category))
   
-  # Get the corresponding instance
+  # Get the corresponding instance (same pattern as category.qmd)
   instance_idx <- which(selected_instances_df$Category == category)
-  instance_x <- selected_instances_x[instance_idx, , drop = FALSE]
-  
-  # Get training data for this category
-  category_train_data <- andmal_after %>%
-    filter(Category == category)
-  
-  if (nrow(category_train_data) > 0) {
-    # Recreate train/test split for this category
-    set.seed(42)
-    if (caret_available) {
-      cat_train_idx <- caret::createDataPartition(
-        category_train_data$Family,
-        p = train_test_split,
-        list = FALSE,
-        times = 1
-      )
-      cat_train <- category_train_data[cat_train_idx, ]
-    } else {
-      families <- unique(category_train_data$Family)
-      train_indices <- c()
-      for (fam in families) {
-        fam_indices <- which(category_train_data$Family == fam)
-        if (length(fam_indices) > 1) {
-          n_train <- max(1, round(length(fam_indices) * train_test_split))
-          train_fam_indices <- sample(fam_indices, n_train)
-          train_indices <- c(train_indices, train_fam_indices)
-        } else {
-          train_indices <- c(train_indices, fam_indices)
-        }
-      }
-      cat_train <- category_train_data[train_indices, ]
-    }
-    
-    train_family_x <- cat_train[, feature_cols_family, drop = FALSE]
+  if (length(instance_idx) == 0) {
+    cat(sprintf("No instance found for category %s\n", category))
+  } else {
+    # Get training data for this category
+    train_family_x <- category_train_data_list[[category]]$train_x
     model <- category_models[[category]]
     
     #### LIME Explanation
     cat(sprintf("\n--- LIME Explanation for %s Instance ---\n", category))
     
-    predict_function_family <- function(model, newdata) {
-      pred <- predict(model, newdata)
-      return(pred$predictions)
-    }
-    
+    # Create LIME explainer
     explainer_family <- lime(
       train_family_x,
       model = model,
@@ -919,34 +623,51 @@ if (category %in% names(category_models) && category %in% selected_instances_df$
       n_bins = 5
     )
     
-    lime_explanation <- explain(
+    # Extract instance (same pattern as category.qmd)
+    instance_x <- as.data.frame(selected_instances_x[instance_idx, , drop = FALSE])
+    
+    lime_explanation <- lime::explain(
       instance_x,
       explainer = explainer_family,
       n_features = 10,
-      n_permutations = 5000
+      n_permutations = 5000,
+      n_labels = 1
     )
     
     cat("LIME Explanation:\n")
-    print(plot_features(lime_explanation))
+    # Ensure explanation has proper structure for plotting
+    if (nrow(lime_explanation) > 0) {
+      # If explanation doesn't have 'case' column, add it
+      if (!"case" %in% colnames(lime_explanation)) {
+        lime_explanation$case <- 1
+      }
+      print(plot_features(lime_explanation))
+    } else {
+      cat("Warning: LIME explanation is empty. Skipping plot.\n")
+    }
     
     #### Per-Instance SHAP Values
     cat(sprintf("\n--- Per-Instance SHAP Values for %s Instance ---\n", category))
     
+    # Create prediction function for fastshap
     pred_wrapper_family <- function(object, newdata) {
       pred <- predict(object, newdata)
       return(pred$predictions)
     }
     
+    # Ensure newdata is a data.frame (same pattern as category.qmd)
+    newdata_df <- as.data.frame(selected_instances_x[instance_idx, , drop = FALSE])
+    
     shap_instance <- explain(
       model,
       X = train_family_x,
-      newdata = instance_x,
+      newdata = newdata_df,
       pred_wrapper = pred_wrapper_family,
       nsim = 100
     )
     
-    # Get predicted class
-    pred_probs <- predict(model, instance_x)$predictions
+    # Get predicted class probabilities
+    pred_probs <- predict(model, newdata_df)$predictions
     pred_class <- colnames(pred_probs)[which.max(pred_probs)]
     
     # Handle SHAP values - fastshap returns a matrix/data.frame
@@ -984,76 +705,65 @@ if (category %in% names(category_models) && category %in% selected_instances_df$
       
       cat(sprintf("Top 20 SHAP values (predicted class: %s):\n", pred_class))
       print(shap_df)
+      
+      # Determine the order of magnitude (exponent) for scientific notation
+      max_abs_value <- max(abs(shap_df$shap_value))
+      if (max_abs_value > 0) {
+        exponent <- floor(log10(max_abs_value))
+        # Round to nearest multiple of 3 for cleaner display
+        exponent <- round(exponent / 3) * 3
+      } else {
+        exponent <- 0
+      }
+      
+      # Create custom label function that shows only significant digits
+      # and scales by the exponent
+      scale_factor <- 10^(-exponent)
+      label_func <- function(x) {
+        scaled <- x * scale_factor
+        # Format with appropriate decimal places
+        if (abs(exponent) >= 3) {
+          sprintf("%.3f", scaled)
+        } else {
+          sprintf("%.4f", scaled)
+        }
+      }
+      
+      # Create visualization
+      y_axis_label <- if (abs(exponent) >= 3) {
+        sprintf("SHAP Value (×10^%d)", exponent)
+      } else {
+        "SHAP Value"
+      }
+      
+      p_shap <- ggplot(shap_df, aes(x = reorder(feature, shap_value), y = shap_value)) +
+        geom_col(aes(fill = shap_value > 0)) +
+        scale_fill_manual(
+          values = c("TRUE" = "#2E8B57", "FALSE" = "#DC143C"),
+          labels = c("TRUE" = "Positive", "FALSE" = "Negative"),
+          name = "SHAP Value"
+        ) +
+        scale_y_continuous(labels = label_func) +
+        coord_flip() +
+        labs(
+          title = sprintf("SHAP Values - %s Instance (%s Family Model)", category, pred_class),
+          subtitle = sprintf("Top 20 features by absolute SHAP value"),
+          x = "Feature",
+          y = y_axis_label
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 14, face = "bold"),
+          plot.subtitle = element_text(size = 12),
+          axis.text.y = element_text(size = 8)
+        )
+      
+      print(p_shap)
     } else {
       cat(sprintf("SHAP values format not recognized for %s instance\n", category))
     }
-    
-    #### Mean Absolute SHAP Values
-    cat(sprintf("\n--- Mean Absolute SHAP Values for %s Category ---\n", category))
-    
-    # Use all instances from this category
-    category_all_x <- category_train_data[, feature_cols_family, drop = FALSE]
-    
-    # Sample if too large
-    n_samples <- min(500, nrow(category_all_x))
-    set.seed(42)
-    sample_indices <- sample(nrow(category_all_x), n_samples)
-    sample_category_x <- category_all_x[sample_indices, , drop = FALSE]
-    
-    cat(sprintf("Calculating SHAP values for %d instances from %s category...\n", 
-                n_samples, category))
-    
-    shap_all_category <- explain(
-      model,
-      X = train_family_x,
-      newdata = sample_category_x,
-      pred_wrapper = pred_wrapper_family,
-      nsim = 50
-    )
-    
-    # Calculate mean absolute SHAP values
-    if (is.data.frame(shap_all_category) || is.matrix(shap_all_category)) {
-      # Check if columns are classes or features
-      if (all(colnames(shap_all_category) %in% feature_cols_family)) {
-        # Columns are features
-        mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-      } else if (any(colnames(shap_all_category) %in% levels(cat_train$Family))) {
-        # Columns might be classes
-        mean_abs_shap_vec <- rowMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-        names(mean_abs_shap_vec) <- rownames(shap_all_category)
-      } else {
-        # Default: assume columns are features
-        mean_abs_shap_vec <- colMeans(abs(as.matrix(shap_all_category)), na.rm = TRUE)
-      }
-      
-      # Create data frame
-      mean_abs_shap_df <- data.frame(
-        feature = names(mean_abs_shap_vec),
-        mean_abs_shap = as.numeric(mean_abs_shap_vec)
-      ) %>%
-        arrange(desc(mean_abs_shap)) %>%
-        head(30)
-      
-      cat("\nTop 30 features by mean absolute SHAP value:\n")
-      print(mean_abs_shap_df)
-      
-      # Plot
-      p <- ggplot(mean_abs_shap_df, aes(x = reorder(feature, mean_abs_shap), y = mean_abs_shap)) +
-        geom_col() +
-        coord_flip() +
-        labs(
-          title = sprintf("Mean Absolute SHAP Values - %s Family Model (Top 30)", category),
-          x = "Feature",
-          y = "Mean |SHAP Value|"
-        ) +
-        theme_minimal()
-      print(p)
-    } else {
-      cat("SHAP values format not recognized for mean absolute calculation\n")
-    }
   }
 } else {
-  cat(sprintf("Skipping %s: model or instance not available\n", category))
+  cat(sprintf("Model for %s not found.\n", category))
 }
 ```
-

@@ -34,15 +34,28 @@ library(viridis)
 
 # Load preprocessed data
 andmal_after <- readRDS("data/processed/andmal_after.rds")
-andmal_before <- readRDS("data/processed/andmal_before.rds")
+
+# Load andmal_before if it exists, otherwise use empty dataframe
+if (file.exists("data/processed/andmal_before.rds")) {
+  andmal_before <- readRDS("data/processed/andmal_before.rds")
+} else {
+  # Create empty dataframe with same structure if file doesn't exist
+  andmal_before <- andmal_after[0, ]
+  cat("Note: andmal_before.rds not found, using only andmal_after data\n")
+}
 
 # Helper function to combine dataframes
 get_combined_data <- function() {
-  bind_rows(
-    andmal_before,
-    andmal_after
-  ) %>%
-  mutate(reboot_state = factor(reboot_state, levels = c("Before reboot", "After reboot")))
+  if (nrow(andmal_before) > 0) {
+    bind_rows(
+      andmal_before,
+      andmal_after
+    ) %>%
+    mutate(reboot_state = factor(reboot_state, levels = c("Before reboot", "After reboot")))
+  } else {
+    andmal_after %>%
+    mutate(reboot_state = factor(reboot_state, levels = c("Before reboot", "After reboot")))
+  }
 }
 
 # Create database read vs write heatmap
@@ -65,68 +78,6 @@ p_db_read_write_heatmap <- ggplot(
   )
 
 p_db_read_write_heatmap
-```
-
-## Dynamic Code Loading Analysis
-
-Dynamic code loading through DexClassLoader APIs varies significantly across malware categories, with some categories showing higher adoption rates than others. This analysis examines the prevalence of dynamic code loading techniques used by different malware types.
-
-```{r}
-#| label: dynamic-dex-chart
-#| cache: true
-
-library(ggplot2)
-library(dplyr)
-library(scales)
-
-# Load preprocessed data
-andmal_after <- readRDS("data/processed/andmal_after.rds")
-andmal_before <- readRDS("data/processed/andmal_before.rds")
-
-# Helper function to combine dataframes
-get_combined_data <- function() {
-  bind_rows(
-    andmal_before,
-    andmal_after
-  ) %>%
-  mutate(reboot_state = factor(reboot_state, levels = c("Before reboot", "After reboot")))
-}
-
-# Summarise per Category: proportion of samples with any Dex loading
-dex_summary <- get_combined_data() %>%
-  group_by(Category) %>%
-  summarise(
-    prop_dex_any = mean(dex_any, na.rm = TRUE),
-    n_samples    = n(),
-    .groups      = "drop"
-  )
-
-# Bar chart: % of apps using Dex loading, by Category
-p_dex_bar <- ggplot(
-  dex_summary,
-  aes(x = Category, y = prop_dex_any, fill = Category)
-) +
-  geom_col() +
-  scale_y_continuous(
-    labels = percent_format(accuracy = 1),
-    expand = expansion(mult = c(0, 0.05))
-  ) +
-  scale_fill_manual(values = rep("red", length(unique(dex_summary$Category)))) +
-  labs(
-    title = "Dynamic Dex loading by malware category",
-    subtitle = "Percentage of samples that use any DexClassLoader / DexFile dynamic loading API",
-    x = "Malware category",
-    y = "% of samples with dynamic Dex loading"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold", hjust = 0),
-    plot.subtitle = element_text(hjust = 0),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "none"
-  )
-
-p_dex_bar
 ```
 
 ## Methodology
